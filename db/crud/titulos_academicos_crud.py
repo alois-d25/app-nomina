@@ -1,0 +1,6 @@
+from crud.base_crud import CRUDBase
+from models.titulos_academicos_model import TitulosAcademicos
+from schemas.titulos_academicos_schema import TitulosAcademicosCreate, TitulosAcademicosUpdate
+
+
+crud_titulos_academicos = CRUDBase[TitulosAcademicos, TitulosAcademicosCreate, TitulosAcademicosUpdate](TitulosAcademicos)

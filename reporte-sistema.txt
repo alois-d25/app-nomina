@@ -1,0 +1,810 @@
+================================================================================
+         SISTEMA DE NÓMINAS — REPORTE TÉCNICO DEL FLUJO DEL SISTEMA
+                          Versión 1.0 | Junio 2026
+                            Documento de Uso Interno
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TABLA DE CONTENIDOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Descripción General del Sistema
+  2. Arquitectura y Stack Tecnológico
+  3. Modelos de Datos y Relaciones
+  4. Módulos Funcionales
+     4.1  Autenticación y Seguridad
+     4.2  Empleados
+     4.3  Usuarios y Roles
+     4.4  Escalafón Salarial
+     4.5  Bonos
+     4.6  Deducciones
+     4.7  Nóminas (Proceso Central)
+     4.8  Cestaticket
+     4.9  Tasa del Dólar
+     4.10 Liquidaciones
+     4.11 Auditorías
+  5. Flujo Detallado de Nómina
+  6. Referencia de API (Endpoints)
+  7. Estado de Implementación
+  8. Mejoras Pendientes
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.  DESCRIPCIÓN GENERAL DEL SISTEMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+El Sistema de Nóminas es una aplicación web de gestión integral para el
+procesamiento de pagos de empleados. Cubre el ciclo completo de nómina:
+
+  • Configuración de la estructura salarial mediante el escalafón
+  • Registro y gestión de empleados con sus beneficios y deducciones
+  • Generación automática de nóminas quincenales y mensuales
+  • Cálculo de salarios en Bs. y USD con tasa de cambio vigente
+  • Control de cestaticket con seguimiento de inasistencias
+  • Liquidación final de empleados al momento de egreso
+  • Registro de auditoría completo de todas las operaciones
+  • Control de acceso granular por roles y permisos
+
+Credenciales de prueba (datos semilla):
+  Email:      prueba@gmail.com
+  Contraseña: prueba123
+  Rol:        Administrador General
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.  ARQUITECTURA Y STACK TECNOLÓGICO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+El sistema implementa una arquitectura de cliente-servidor desacoplada en tres
+capas:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │           CAPA DE PRESENTACIÓN                          │
+  │           Next.js 16.2.6 (React 19.2.4)                 │
+  │           TailwindCSS + DaisyUI                         │
+  └────────────────────┬────────────────────────────────────┘
+                       │  HTTP REST via Axios
+                       │  JWT almacenado en Cookie httponly
+  ┌────────────────────▼────────────────────────────────────┐
+  │           CAPA DE NEGOCIO                               │
+  │           FastAPI (Python)                              │
+  │           SQLAlchemy ORM | Pydantic (validación)        │
+  │           Middleware de Auditoría automática            │
+  └────────────────────┬────────────────────────────────────┘
+                       │  mysql+pymysql
+  ┌────────────────────▼────────────────────────────────────┐
+  │           CAPA DE DATOS                                 │
+  │           MySQL                                         │
+  │           Sequelize (migraciones y semillas)            │
+  └─────────────────────────────────────────────────────────┘
+
+Stack Tecnológico:
+  Frontend  : Next.js 16.2.6, React 19.2.4, TailwindCSS, DaisyUI
+  Backend   : FastAPI (Python), SQLAlchemy ORM, python-jose (JWT)
+  Base Datos: MySQL con Sequelize para migraciones
+  HTTP      : Axios (frontend), PyMySQL (backend)
+  Seguridad : JWT en cookies httponly, bcrypt para contraseñas
+
+Estructura de directorios:
+
+  nominas-app/
+  ├── app/                     # Frontend Next.js (App Router)
+  │   ├── (auth)/login/        # Ruta pública
+  │   ├── (system)/            # Rutas protegidas
+  │   │   ├── layout.jsx       # Sidebar y navegación principal
+  │   │   ├── employees/       # Gestión de empleados
+  │   │   ├── nomina/          # Procesamiento de nómina
+  │   │   ├── bonus/           # Gestión de bonos
+  │   │   ├── deductions/      # Gestión de deducciones
+  │   │   ├── liquidaciones/   # Liquidaciones finales
+  │   │   ├── users/           # Gestión de usuarios
+  │   │   ├── salaryRules/     # Escala salarial
+  │   │   ├── exchange/        # Tasa del dólar
+  │   │   └── audits/          # Registro de auditoría
+  │   └── components/          # Componentes compartidos
+  │
+  └── db/                      # Backend FastAPI
+      ├── main.py              # Entrada de la aplicación
+      ├── database.py          # Configuración de BD
+      ├── models/              # Modelos SQLAlchemy (21 modelos)
+      ├── schemas/             # Esquemas Pydantic
+      ├── crud/                # Capa de acceso a datos
+      ├── routers/             # Endpoints REST (17 routers)
+      ├── utils/               # Seguridad, mixins, contexto
+      ├── migrations/          # 18 migraciones Sequelize
+      └── seeders/             # seed_all.py — datos iniciales
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.  MODELOS DE DATOS Y RELACIONES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Todos los modelos heredan de AuditMixin, que agrega automáticamente:
+  created_at, updated_at, created_by, updated_by
+
+─────────────────────────────────────────────────────────────────────────────
+Modelo               Tabla               Campos Principales
+─────────────────────────────────────────────────────────────────────────────
+Empleado             empleados           cedula (PK), nombre, apellido,
+                                         estado (activo/inactivo/permiso),
+                                         salario_base Decimal(14,2),
+                                         fecha_ingreso, telefono,
+                                         numero_cuenta
+                                         → nivel_escalafon_id (FK)
+                                         → titulo_academico_id (FK)
+
+Usuario              usuarios            id (PK), email (único),
+                                         hashed_password, activo (bool)
+                                         → empleado_cedula (FK, 1:1)
+                                         → rol_id (FK)
+
+Nominas              nominas             id (PK), fecha_pago, tasa_dolar
+                                         → NominaEmpleado (1:N)
+
+NominaEmpleado       nomina_empleado     PK compuesto: (nomina_id, cedula)
+                                         salario_base, total_ingresos,
+                                         total_deducciones,
+                                         salario_final_bs,
+                                         salario_final_usd
+                                         → Nominas (FK)
+                                         → Empleado (FK)
+
+Bono                 bonos               id (PK), nombre, monto Decimal(14,2),
+                                         es_porcentaje (bool),
+                                         tipo_pago (unico/quincenal/mensual),
+                                         fecha (solo si tipo=unico)
+
+BonoEmpleado         bono_empleado       PK: (empleado_cedula, bono_id)
+NominaBono           nomina_bono         PK: (nomina_id, bono_id)
+
+Deduccion            deducciones         id (PK),
+                                         nombre (Enum: IVSS/LPH/FAOB/
+                                           Anticipos/Uniforme/Inscripcion/
+                                           Prestamo Personal/Inasistencias),
+                                         monto Decimal(14,2), es_porcentaje,
+                                         tipo_pago, fecha
+
+DeduccionEmpleado    deduccion_empleado  PK: (empleado_cedula, deduccion_id)
+NominaDeduccion      nomina_deduccion    PK: (nomina_id, deduccion_id)
+
+Liquidacion          liquidaciones       id (PK),
+                                         empleado_cedula (FK),
+                                         fecha_egreso, anios_totales,
+                                         monto_total_bs Decimal(14,2),
+                                         monto_total_usd Decimal(14,2),
+                                         estado (Borrador/Pendiente/
+                                                 Aprobada/Completada),
+                                         causa_egreso (Renuncia/Despido/
+                                                       Fin de Contrato)
+
+Cestaticket          cestaticket         id (PK), monto Decimal(14,2)
+                                         → empleado_cedula (FK, 1:1)
+CestaticketMes       cestaticket_mes     id (PK), fecha, inasistencias (int),
+                                         observacion
+                                         → cestaticket_id (FK)
+
+TasaDolar            tasa_dolar          id (PK), tipo (BCV/PARALELO/
+                                           PERSONALIZADO),
+                                         valor, fecha,
+                                         fuente (api/usuario)
+                                         → usuario_id (FK, nullable)
+
+Auditoria            auditorias          id (PK), tabla_afectada,
+                                         registro_id, accion (INSERT/
+                                           UPDATE/DELETE/LOGIN/LOGOUT),
+                                         valor_anterior, valor_nuevo,
+                                         ip_usuario, fecha (DateTime)
+                                         → usuario_id (FK, nullable)
+
+Rol                  roles               id (PK), nombre (único)
+Permiso              permisos            id (PK), nombre (único)
+RolPermiso           rol_permiso         → rol_id (FK), → permiso_id (FK)
+
+TitulosAcademicos    titulos_academicos  id (PK), nombre, descripcion
+NivelesEscalafon     niveles_escalafon   id (PK), nombre, descripcion
+ReglasEscalafon      reglas_escalafon    id (PK), anios_min, anios_max,
+                                         salario_base, activa (bool)
+                                         → nivel_escalafon_id (FK)
+                                         → titulo_academico_id (FK)
+─────────────────────────────────────────────────────────────────────────────
+
+Diagrama de relaciones principales:
+
+  TitulosAcademicos ──┐
+                      ├──→ Empleado ←── Liquidacion
+  NivelesEscalafon ───┤        │
+  ReglasEscalafon ────┘        ├──→ Usuario ──→ Rol ──→ Permiso
+                               ├──→ Cestaticket ──→ CestaticketMes
+                               │
+  Nominas ──→ NominaEmpleado ──┤
+       │                       │
+       └──→ NominaBono         ├──→ BonoEmpleado ──→ Bono
+       └──→ NominaDeduccion    └──→ DeduccionEmpleado ──→ Deduccion
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4.  MÓDULOS FUNCIONALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1  AUTENTICACIÓN Y SEGURIDAD
+─────────────────────────────
+
+Ruta frontend: /login
+API:           POST /api/login/login
+               GET  /api/login/me
+               POST /api/login/logout
+
+Flujo:
+
+  [1] El usuario ingresa email y contraseña en /login
+
+  [2] El backend valida las credenciales contra el hash bcrypt almacenado
+      en la tabla usuarios
+
+  [3] Si es válido, se genera un token JWT firmado. Se envía al navegador
+      como cookie httponly (no accesible desde JavaScript — protege contra XSS)
+
+  [4] En cada request posterior, el middleware del backend:
+      • Extrae el token de la cookie
+      • Lo decodifica con python-jose
+      • Almacena user_id e IP en variables de contexto
+      • Las variables de contexto alimentan el registro de auditoría
+
+  [5] El proxy Next.js (proxy.js / middleware) detecta la presencia de la
+      cookie. Si no hay token y la ruta es protegida → redirige a /login.
+      Si el usuario ya autenticado intenta ir a /login → redirige a /
+
+Permisos del sistema (13 permisos):
+  • usuarios:crear    usuarios:ver    usuarios:editar    usuarios:eliminar
+  • empleados:crear   empleados:ver   empleados:editar   empleados:eliminar
+  • nominas:crear     nominas:ver     nominas:editar     nominas:eliminar
+  • roles:gestionar
+
+Roles predefinidos:
+  • Administrador General  — acceso completo a todos los módulos
+  • Administrador          — gestión de nóminas, empleados y configuración
+  • Asistente              — consulta y operaciones básicas
+
+
+4.2  EMPLEADOS
+─────────────
+
+Ruta frontend: /employees
+API:           /api/empleados
+
+El módulo de empleados gestiona el ciclo de vida completo del recurso humano.
+
+Registro de empleado (/employees/register):
+  [1] Se ingresan datos personales: cédula, nombre, apellido, email,
+      teléfono, número de cuenta bancaria
+  [2] Se asigna nivel de escalafón y título académico
+  [3] El sistema sugiere el salario base según la regla de escalafón que
+      corresponda al nivel + título + años de experiencia del empleado
+  [4] Se ingresa el monto del cestaticket (editable, default: Bs. 40)
+  [5] Al guardar, se crean simultáneamente el registro de Empleado y
+      su registro de Cestaticket asociado
+
+Estados del empleado:
+  • activo    — incluido en todas las nóminas
+  • inactivo  — excluido de nóminas (se establece al aprobar una liquidación)
+  • permiso   — empleado en permiso temporal
+
+Operaciones disponibles:
+  • Listar empleados con filtros y búsqueda
+  • Crear nuevo empleado
+  • Editar datos, nivel de escalafón y título académico
+  • Ver detalle del empleado dentro de una nómina específica
+
+
+4.3  USUARIOS Y ROLES
+─────────────────────
+
+Ruta frontend: /users
+API:           /api/usuarios, /api/roles
+
+Gestión de cuentas de acceso al sistema.
+
+Relación empleado → usuario:
+  • Un empleado puede tener como máximo una cuenta de usuario (1:1)
+  • Sólo empleados sin cuenta aparecen disponibles al crear un usuario
+  • El endpoint GET /api/empleados/filtro/sin-usuario devuelve esta lista
+
+Gestión de roles:
+  • Cada usuario tiene un rol asignado
+  • Los roles tienen permisos granulares configurables
+  • La vista /api/usuarios/vista/detalles devuelve nombre, apellido, email y rol
+
+
+4.4  ESCALAFÓN SALARIAL
+───────────────────────
+
+Ruta frontend: /salaryRules
+API:           /api/reglas_escalafon, /api/niveles_escalafon,
+               /api/titulos_academicos
+
+Define la estructura salarial de la organización como una matriz de tres
+dimensiones: nivel jerárquico × título académico × rango de antigüedad.
+
+  Nivel (NivelesEscalafon):
+    Directivo | Profesor x hora | Maestro | Administrativo | Servicio
+
+  Títulos (TitulosAcademicos):
+    Bachiller, TSU, Licenciado, Magíster, Doctor, etc.
+
+  Reglas (ReglasEscalafon):
+    Combinan Nivel + Título + rango de años (anios_min, anios_max)
+    → definen el salario_base resultante
+
+  Ejemplo:
+    Maestro + Licenciado + 5 a 10 años = Bs. 1.500,00
+
+Al registrar un empleado, se le asigna un nivel y un título; el sistema
+usa esa combinación junto con sus años de experiencia para consultar la
+regla correspondiente y sugerir el salario base.
+
+
+4.5  BONOS
+──────────
+
+Ruta frontend: /bonus
+API:           /api/bonos, /api/bonos_relaciones
+
+Los bonos son beneficios adicionales al salario base. Se crean de forma
+global y se asignan a uno o varios empleados.
+
+Campos clave:
+  • nombre, descripcion, observacion
+  • monto Decimal(14,2)
+  • es_porcentaje (bool):
+      true  → el monto se aplica como % del salario base del empleado
+      false → el monto se aplica como valor fijo en Bs.
+  • tipo_pago: unico | quincenal | mensual
+  • fecha: solo se solicita cuando tipo_pago = unico
+
+Lógica de aplicación por período de nómina:
+
+  tipo_pago = unico      → se aplica SOLO en la nómina cuya fecha coincide
+                            con el campo fecha del bono
+  tipo_pago = quincenal  → se aplica en AMBAS quincenas del mes (1ª y 2ª)
+  tipo_pago = mensual    → se aplica SOLO en la segunda quincena del mes
+
+Al crear o editar un bono, se puede asignar simultáneamente a múltiples
+empleados mediante un selector. Crear un bono dispara automáticamente un
+recálculo de la nómina activa si existe.
+
+
+4.6  DEDUCCIONES
+─────────────────
+
+Ruta frontend: /deductions
+API:           /api/deducciones, /api/deducciones_relaciones
+
+Las deducciones son descuentos sobre el salario. Tienen la misma lógica
+de tipo_pago y es_porcentaje que los bonos.
+
+Tipos predefinidos (Enum):
+  IVSS | LPH | FAOB | Anticipos | Uniforme |
+  Inscripcion | Prestamo Personal | Inasistencias
+
+La lógica de cuándo aplica cada deducción es idéntica a la de los bonos
+(unico/quincenal/mensual). Las deducciones tipo porcentaje toman como base
+el salario_base del empleado en ese período.
+
+
+4.7  NÓMINAS (PROCESO CENTRAL)
+──────────────────────────────
+
+Ruta frontend: /nomina
+API:           /api/nominas
+
+Es el proceso central del sistema. Se ejecuta quincenalmente.
+
+─── Creación de nómina ───────────────────────────────────────────────────
+
+  [1] El administrador selecciona: mes, año, quincena (1 ó 2)
+
+  [2] POST /api/nominas/crear ejecuta el siguiente proceso para cada
+      empleado con estado = "activo":
+
+      a) Obtener salario_base del empleado
+
+      b) Consultar bonos asignados al empleado:
+         - Filtrar por tipo_pago y período actual
+         - Si es_porcentaje: monto_bono = salario_base × (monto / 100)
+         - Si no: monto_bono = monto
+
+      c) Consultar deducciones asignadas al empleado:
+         - Mismo filtro de tipo_pago y período
+         - Misma lógica de porcentaje vs. valor fijo
+
+      d) Consultar cestaticket:
+         - Solo si quincena = 2
+         - Solo si el CestaticketMes del mes actual tiene inasistencias < 10
+         - Monto: el definido en el registro Cestaticket del empleado
+
+      e) Calcular:
+         total_ingresos    = salario_base + Σ bonos + cestaticket (si aplica)
+         total_deducciones = Σ deducciones
+         salario_final_bs  = total_ingresos - total_deducciones
+         salario_final_usd = salario_final_bs / tasa_dolar_vigente
+
+      f) Guardar registro NominaEmpleado con todos los valores calculados
+
+  [3] La nómina queda disponible en la tabla principal con todos los
+      empleados y sus montos desglosados
+
+─── Vista de nómina ──────────────────────────────────────────────────────
+
+  • Tabla con todos los empleados procesados
+  • Columnas: cédula, nombre, salario base, ingresos, deducciones,
+              cestaticket, salario final Bs., salario final USD
+  • Acciones: ver detalle por empleado, editar info del empleado en nómina
+
+─── Recálculo ────────────────────────────────────────────────────────────
+
+  Si se crean o modifican bonos/deducciones DESPUÉS de generar la nómina,
+  se debe ejecutar POST /api/nominas/recalcular/{nomina_id} para actualizar
+  los montos de todos los empleados.
+
+─── Edición de empleado en nómina ────────────────────────────────────────
+
+  Desde la vista /nomina/employee/{id} se puede editar el registro
+  NominaEmpleado del empleado en esa nómina específica (ajustar montos
+  individualmente sin regenerar toda la nómina).
+
+
+4.8  CESTATICKET
+─────────────────
+
+API: /api/cestaticket
+
+Beneficio de alimentación mensual. Se integra automáticamente en la
+generación de nómina de la segunda quincena.
+
+Flujo:
+  [1] Al registrar un empleado se crea automáticamente su Cestaticket
+      con el monto ingresado en el formulario (default: Bs. 40)
+
+  [2] Mensualmente se registra en CestaticketMes el número de inasistencias
+      del empleado en ese mes
+
+  [3] Al generar la nómina de la segunda quincena:
+      - El sistema consulta el CestaticketMes del mes y año de la nómina
+      - Si inasistencias < 10: se suma el monto del cestaticket a los ingresos
+      - Si inasistencias >= 10: no se incluye el cestaticket ese mes
+
+
+4.9  TASA DEL DÓLAR
+────────────────────
+
+Ruta frontend: /exchange
+API:           /api/tasa_dolar
+
+Gestión del historial de tasas de cambio Bs./USD.
+
+Tipos de tasa:
+  BCV          → Se obtiene automáticamente de la API del Banco Central
+                 de Venezuela (endpoint GET /api/tasa_dolar/actual)
+  PARALELO     → Se obtiene de la API DolarVZLA (USDT)
+                 (endpoint GET /api/tasa_dolar/usdt)
+  PERSONALIZADO → El administrador ingresa el valor manualmente
+
+La tasa vigente al momento de crear la nómina se usa para calcular el
+salario_final_usd de cada empleado. El historial completo de tasas queda
+registrado con fecha, fuente y usuario que la ingresó.
+
+
+4.10 LIQUIDACIONES
+───────────────────
+
+Ruta frontend: /liquidaciones
+API:           /api/liquidaciones
+
+Gestiona el proceso de egreso definitivo de empleados y el cálculo de
+su liquidación final.
+
+Estados posibles:
+  Borrador   → recién creada, pendiente de revisión
+  Pendiente  → en revisión por RRHH
+  Aprobada   → aprobada formalmente, empleado marcado como inactivo
+  Completada → pago efectuado, proceso cerrado
+
+Causas de egreso:
+  Renuncia | Despido | Fin de Contrato
+
+─── Flujo de creación (3 pasos) ──────────────────────────────────────────
+
+  Paso 1 — Información:
+    • Seleccionar empleado del listado de activos
+    • Ingresar fecha de egreso
+    • Seleccionar causa de egreso
+    • Pulsar "Calcular Liquidación"
+
+  Paso 2 — Revisar Cálculo:
+    El sistema calcula automáticamente:
+    • Años totales = fecha_egreso - fecha_ingreso (en años completos)
+    • Monto total Bs. = salario_base × años_totales
+    • Monto total USD = monto_total_bs / tasa_dolar_vigente
+
+    Se muestra el desglose completo para revisión del administrador.
+
+  Paso 3 — Confirmación:
+    • El administrador confirma los montos
+    • Se crea la liquidación con estado "Borrador"
+
+─── Proceso de aprobación ────────────────────────────────────────────────
+
+  POST /api/liquidaciones/{id}/approve
+
+  Al ejecutar este endpoint:
+    [1] Estado de la liquidación → "Aprobada"
+    [2] Estado del empleado      → "inactivo"
+    [3] El empleado queda excluido de futuras nóminas
+
+─── Vista de detalle (/liquidaciones/{id}) ───────────────────────────────
+
+  • Información del empleado: cédula, nombre, fecha ingreso, salario base
+  • Información de egreso: fecha, causa, años totales de servicio
+  • Montos calculados: total en Bs. y en USD
+  • Botón "Aprobar Liquidación" (visible solo si estado = Borrador)
+  • Botón "Descargar Recibo" (exportación a PDF — pendiente)
+
+
+4.11 AUDITORÍAS
+───────────────
+
+Ruta frontend: /audits
+API:           /api/auditorias
+
+Registro automático e inmutable de todas las operaciones realizadas en el
+sistema. No requiere código adicional — el middleware del backend intercepta
+todas las operaciones.
+
+Operaciones registradas:
+  INSERT  → creación de cualquier registro
+  UPDATE  → modificación de datos (guarda valor anterior y nuevo)
+  DELETE  → eliminación de registros
+  LOGIN   → inicio de sesión exitoso
+  LOGOUT  → cierre de sesión
+
+Cada registro de auditoría contiene:
+  • Tabla afectada y ID del registro modificado
+  • Valor anterior (JSON del estado previo)
+  • Valor nuevo (JSON del estado posterior)
+  • Usuario que realizó la acción
+  • Dirección IP del usuario
+  • Fecha y hora exacta (DateTime)
+
+El endpoint GET /api/auditorias/vista/detalles permite filtrar por:
+  fecha_desde, fecha_hasta, accion, tabla — con paginación.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5.  FLUJO DETALLADO DE NÓMINA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Tabla de aplicación de bonos y deducciones por tipo de pago:
+
+  ┌────────────────────┬──────────────────┬──────────────────┬─────────────┐
+  │ tipo_pago          │ Quincena 1       │ Quincena 2       │ Requiere    │
+  │                    │ (días 1–15)      │ (días 16–fin)    │ fecha       │
+  ├────────────────────┼──────────────────┼──────────────────┼─────────────┤
+  │ Único              │ Si fecha = Q1    │ Si fecha = Q2    │ SÍ          │
+  │ Quincenal          │ Siempre ✓        │ Siempre ✓        │ No          │
+  │ Mensual            │ No aplica ✗      │ Siempre ✓        │ No          │
+  │ Cestaticket        │ No aplica ✗      │ Si inasist < 10  │ No          │
+  └────────────────────┴──────────────────┴──────────────────┴─────────────┘
+
+Fórmula de cálculo del salario:
+
+  total_ingresos    = salario_base
+                    + Σ (bono_i donde aplica_en_periodo(bono_i))
+                    + cestaticket (si quincena=2 y inasistencias < 10)
+
+  total_deducciones = Σ (deduccion_j donde aplica_en_periodo(deduccion_j))
+
+  salario_final_bs  = total_ingresos - total_deducciones
+
+  salario_final_usd = salario_final_bs / tasa_dolar_vigente
+
+  Para bonos/deducciones con es_porcentaje = true:
+    monto_aplicado = salario_base × (monto / 100)
+
+Flujo completo de procesamiento (secuencia de sistema):
+
+  ADMINISTRADOR             SISTEMA                    BASE DE DATOS
+       │                       │                              │
+       │  selecciona período   │                              │
+       ├──────────────────────►│                              │
+       │                       │  consulta empleados activos  │
+       │                       ├─────────────────────────────►│
+       │                       │◄─────────────────────────────┤
+       │                       │                              │
+       │                       │  para cada empleado:         │
+       │                       │  ├─ obtiene salario_base     │
+       │                       │  ├─ filtra bonos por período │
+       │                       │  ├─ filtra deducciones       │
+       │                       │  ├─ verifica cestaticket     │
+       │                       │  ├─ calcula totales          │
+       │                       │  └─ guarda NominaEmpleado    │
+       │                       │                              │
+       │  nómina generada      │                              │
+       │◄──────────────────────┤                              │
+       │                       │                              │
+       │  (si modifica bonos)  │                              │
+       │  recalcular           │                              │
+       ├──────────────────────►│                              │
+       │                       │  reprocesa todos empleados   │
+       │◄──────────────────────┤                              │
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6.  REFERENCIA DE API (ENDPOINTS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Prefijo base: /api
+Autenticación: Cookie JWT httponly requerida en todos los endpoints salvo login
+
+AUTENTICACIÓN
+  POST  /api/login/login                    Autenticar usuario
+  GET   /api/login/me                       Obtener usuario actual
+  POST  /api/login/logout                   Cerrar sesión
+
+EMPLEADOS
+  POST  /api/empleados/                     Crear empleado
+  GET   /api/empleados/                     Listar empleados (skip, limit)
+  GET   /api/empleados/{cedula}             Obtener empleado por cédula
+  PUT   /api/empleados/{cedula}             Actualizar empleado
+  DELETE /api/empleados/{cedula}            Eliminar empleado
+  GET   /api/empleados/filtro/sin-usuario   Empleados sin cuenta de usuario
+
+USUARIOS
+  POST  /api/usuarios/                      Crear usuario
+  GET   /api/usuarios/                      Listar usuarios
+  GET   /api/usuarios/{id}                  Obtener usuario
+  PUT   /api/usuarios/{id}                  Actualizar usuario
+  DELETE /api/usuarios/{id}                 Eliminar usuario
+  GET   /api/usuarios/vista/detalles        Usuarios con nombre, rol, email
+
+NÓMINAS
+  POST  /api/nominas/crear                  Crear nómina con todos empleados
+  GET   /api/nominas/buscar/periodo         Buscar por mes/año/quincena
+  GET   /api/nominas/{id}/detalle-empleados Detalle de pagos por empleado
+  POST  /api/nominas/recalcular/{id}        Recalcular nómina existente
+  POST  /api/nominas/                       Crear nómina vacía
+  GET   /api/nominas/                       Listar nóminas
+  GET   /api/nominas/{id}                   Obtener nómina
+  PUT   /api/nominas/{id}                   Actualizar nómina
+  DELETE /api/nominas/{id}                  Eliminar nómina
+
+NOMINA EMPLEADO (detalle por empleado)
+  POST  /api/nomina_empleados/              Crear registro
+  GET   /api/nomina_empleados/              Listar todos
+  GET   /api/nomina_empleados/{nid}/{ced}   Obtener específico
+  PUT   /api/nomina_empleados/{nid}/{ced}   Actualizar (ajuste manual)
+  DELETE /api/nomina_empleados/{nid}/{ced}  Eliminar
+
+BONOS
+  POST  /api/bonos/                         Crear bono con empleados asignados
+  GET   /api/bonos/                         Listar bonos
+  GET   /api/bonos/{id}                     Obtener bono
+  PUT   /api/bonos/{id}                     Actualizar bono
+  DELETE /api/bonos/{id}                    Eliminar bono
+  POST  /api/bonos_relaciones/empleados     Asignar bono a empleados
+  GET   /api/bonos_relaciones/empleados     Listar relaciones bono-empleado
+  DELETE /api/bonos_relaciones/empleados/{bid}/{ced}  Desasignar
+
+DEDUCCIONES
+  POST  /api/deducciones/                   Crear deducción con empleados
+  GET   /api/deducciones/                   Listar deducciones
+  GET   /api/deducciones/{id}               Obtener deducción
+  PUT   /api/deducciones/{id}               Actualizar deducción
+  DELETE /api/deducciones/{id}              Eliminar deducción
+  POST  /api/deducciones_relaciones/empleados   Asignar deducción a empleados
+  DELETE /api/deducciones_relaciones/empleados/{did}/{ced}  Desasignar
+
+LIQUIDACIONES
+  POST  /api/liquidaciones/                 Crear liquidación (Borrador)
+  GET   /api/liquidaciones/                 Listar liquidaciones
+  GET   /api/liquidaciones/{id}             Obtener liquidación
+  PUT   /api/liquidaciones/{id}             Actualizar liquidación
+  DELETE /api/liquidaciones/{id}            Eliminar liquidación
+  POST  /api/liquidaciones/{id}/approve     Aprobar → empleado inactivo
+  GET   /api/liquidaciones/employee/{ced}   Liquidación de un empleado
+
+TASA DEL DÓLAR
+  GET   /api/tasa_dolar/actual              Consultar tasa BCV (API externa)
+  GET   /api/tasa_dolar/usdt                Consultar tasa USDT (DolarVZLA)
+  GET   /api/tasa_dolar/historial           Historial completo de tasas
+  POST  /api/tasa_dolar/                    Registrar tasa manual
+  GET   /api/tasa_dolar/                    Listar tasas
+  PUT   /api/tasa_dolar/{id}                Actualizar tasa
+  DELETE /api/tasa_dolar/{id}               Eliminar tasa
+
+CESTATICKET
+  POST  /api/cestaticket/                   Crear cestaticket
+  GET   /api/cestaticket/                   Listar
+  GET   /api/cestaticket/{id}               Obtener
+  PUT   /api/cestaticket/{id}               Actualizar monto
+  DELETE /api/cestaticket/{id}              Eliminar
+
+ESCALAFÓN
+  CRUD completo en /api/niveles_escalafon, /api/titulos_academicos,
+  /api/reglas_escalafon
+  GET   /api/reglas_escalafon/vista/detalles  Reglas con nivel y título
+
+AUDITORÍAS
+  GET   /api/auditorias/vista/detalles      Logs paginados y filtrados
+  GET   /api/auditorias/                    Listar registros
+  GET   /api/auditorias/{id}                Obtener registro
+
+ROLES Y PERMISOS
+  GET   /api/roles/                         Listar roles
+  GET   /api/roles/roles/{id}               Obtener rol
+  GET   /api/roles/permisos                 Listar permisos
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7.  ESTADO DE IMPLEMENTACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────┬───────────┬───────────┬──────────────────┐
+  │ Módulo                         │ Backend   │ Frontend  │ Estado           │
+  ├────────────────────────────────┼───────────┼───────────┼──────────────────┤
+  │ Autenticación (Login/Logout)   │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Empleados (CRUD)               │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Usuarios y Roles               │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Escalafón Salarial             │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Bonos                          │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Deducciones                    │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Nóminas (generación)           │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Cestaticket                    │ Completo  │ Parcial   │ INTEGRADO EN NOM │
+  │ Tasa del Dólar                 │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Liquidaciones                  │ Completo  │ Completo  │ FUNCIONAL        │
+  │ Auditorías                     │ Completo  │ Completo  │ FUNCIONAL        │
+  └────────────────────────────────┴───────────┴───────────┴──────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8.  MEJORAS PENDIENTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [1] Liquidaciones — Cálculo detallado
+      El cálculo actual usa la fórmula simplificada: salario_base × años.
+      Pendiente integrar el historial real de nóminas, préstamos y anticipos
+      pendientes para un cálculo fidedigno conforme a la ley.
+
+  [2] Liquidaciones — Exportar recibo PDF
+      El botón "Descargar Recibo" en /liquidaciones/{id} está definido en
+      la interfaz pero sin implementación. Requiere generar el documento
+      legal de liquidación para firma y archivo bancario.
+
+  [3] Nóminas — Bloqueo explícito de empleados inactivos
+      Agregar un filtro WHERE estado = 'activo' en el CRUD de creación
+      de nómina para garantizar que empleados con liquidación aprobada
+      no sean procesados accidentalmente.
+
+  [4] Cestaticket — Gestión mensual de inasistencias
+      La interfaz de registro mensual por empleado (CestaticketMes) no
+      está completamente conectada al frontend. Se necesita una vista
+      para ingresar y editar las inasistencias de cada mes.
+
+  [5] Frontend — Guards de permisos por rol
+      Los permisos están correctamente definidos en la base de datos y
+      asignados por rol, pero el frontend no verifica el rol del usuario
+      para restringir el acceso a rutas o esconder acciones. Se necesita
+      implementar un guard en el contexto de autenticación y en el layout.
+
+  [6] Liquidaciones — Indemnización por causa de egreso
+      La causa del egreso (Renuncia/Despido/Fin de Contrato) no modifica
+      actualmente el cálculo del monto. La normativa venezolana establece
+      diferencias en el cálculo de prestaciones según la causa; esto debe
+      implementarse en el cálculo del borrador.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                           FIN DEL DOCUMENTO
+             Sistema de Nóminas — Reporte Técnico v1.0 | Junio 2026
+                            Documento de Uso Interno
+================================================================================

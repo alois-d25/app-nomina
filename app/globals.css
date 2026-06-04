@@ -1,0 +1,266 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* =========================
+   DAISY UI THEME
+========================= */
+
+@plugin "daisyui"{
+  themes:false;
+}
+
+@plugin "daisyui/theme" {
+  name: "school";
+  default: true;
+  prefersdark: false;
+  color-scheme: "light";
+
+  /* Base */
+  --color-base-100: #f4fbf3;
+  --color-base-200: #eef6ee;
+  --color-base-300: #dde4dd;
+  --color-base-content: #161d19;
+
+  /* Primary */
+  --color-primary: #4b6700;
+  --color-primary-content: #ffffff;
+
+  /* Secondary */
+  --color-secondary: #625e58;
+  --color-secondary-content: #ffffff;
+
+  /* Accent (mapped from tertiary) */
+  --color-accent: #516070;
+  --color-accent-content: #ffffff;
+
+  /* Neutral */
+  --color-neutral: #2b342f;
+  --color-neutral-content: #ebf3eb;
+
+  /* Status */
+  --color-info: #4b6700;
+  --color-info-content: #ffffff;
+
+  --color-success: #a0d800;
+  --color-success-content: #ffffff;
+
+  --color-warning: #d4a72c;
+  --color-warning-content: #2b1d00;
+
+  --color-error: #ba1a1a;
+  --color-error-content: #ffffff;
+
+  /* Radius */
+  --radius-selector: 1rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1.5rem;
+
+  /* Sizing */
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* =========================
+   ROOT TOKENS
+========================= */
+
+:root {
+  /* Backgrounds */
+  --background: #f4fbf3;
+  --foreground: #161d19;
+
+  /* Surface system */
+  --surface: #f4fbf3;
+  --surface-dim: #d5dcd4;
+  --surface-bright: #f4fbf3;
+
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef6ee;
+  --surface-container: #e9f0e8;
+  --surface-container-high: #e3eae2;
+  --surface-container-highest: #dde4dd;
+
+  /* Text */
+  --on-surface: #161d19;
+  --on-surface-variant: #434933;
+  --inverse-on-surface: #ebf3eb;
+
+  /* Borders */
+  --outline: #737a61;
+  --outline-variant: #c2caad;
+
+  /* Brand */
+  --primary: #4b6700;
+  --on-primary: #ffffff;
+
+  --primary-container: #bdff00;
+  --on-primary-container: #547300;
+
+  --secondary: #625e58;
+  --on-secondary: #ffffff;
+
+  --secondary-container: #e5dfd7;
+  --on-secondary-container: #66625c;
+
+  --tertiary: #516070;
+  --on-tertiary: #ffffff;
+
+  --tertiary-container: #dcecff;
+  --on-tertiary-container: #5c6b7b;
+
+  /* States */
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+
+  /* Typography */
+  --font-heading: "Manrope", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-default: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --container-max: 1440px;
+  --sidebar-width: 260px;
+
+  /* Spacing */
+  --gutter: 1.5rem;
+  --margin-page: 2rem;
+
+  --stack-sm: 0.5rem;
+  --stack-md: 1rem;
+  --stack-lg: 2rem;
+}
+
+/* =========================
+   DARK MODE
+========================= */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #ebf3eb ;
+    --foreground: #161d19;
+
+    --surface: #f4fbf3;
+    --surface-container: #e9f0e8;
+    --surface-container-high: #e3eae2;
+
+    --on-surface: #161d19;
+    --on-surface-variant: #434933;
+
+    --primary: #4b6700;
+    --primary-container: #bdff00;
+
+    --secondary: #625e58;
+    --secondary-container: #e5dfd7;
+
+    --tertiary: #516070;
+    --tertiary-container: #dcecff;
+
+    --outline: #737a61;
+  }
+}
+
+/* =========================
+   TAILWIND INLINE TOKENS
+========================= */
+
+ @theme inline {
+   --color-background: var(--background);
+   --color-foreground: var(--foreground);
+ 
+   /* Colors Mapping */
+   --color-primary: var(--primary);
+   --color-on-primary: var(--on-primary);
+   --color-surface: var(--surface);
+   --color-on-surface: var(--on-surface);
+   --color-on-surface-variant: var(--on-surface-variant);
+   --color-surface-container-lowest: var(--surface-container-lowest);
+   --color-surface-container-high: var(--surface-container-high);
+   --color-surface-container-highest: var(--surface-container-highest);
+   --color-surface-variant: var(--surface-variant);
+   --color-outline: var(--outline);
+   --color-outline-variant: var(--outline-variant);
+   --color-secondary-container: var(--secondary-container);
+ 
+   /* Spacing Mapping */
+   --spacing-stack-sm: var(--stack-sm);
+   --spacing-stack-md: var(--stack-md);
+   --spacing-stack-lg: var(--stack-lg);
+ 
+   /* Typography Mapping */
+   --font-sans: var(--font-body);
+   --font-heading: var(--font-heading);
+   --text-headline-xl: 2.25rem;
+   --text-headline-md: 1.75rem;
+   --text-body-md: 1rem;
+   --text-body-sm: 0.875rem;
+   --text-label-md: 0.75rem;
+   --text-label-sm: 0.6875rem;
+ 
+   /* Radius Mapping */
+   --radius-DEFAULT: var(--radius-default);
+ }
+
+/* <div className="bg-[var(--surface-container)] text-[var(--on-surface)]"> */
+
+/* =========================
+   GLOBAL STYLES
+========================= */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+
+  font-family: var(--font-body);
+
+  min-height: 100vh;
+
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* =========================
+   HEADINGS
+========================= */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  color: var(--on-surface);
+}
+
+h1 {
+  font-size: 2.25rem;
+  line-height: 2.75rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+}

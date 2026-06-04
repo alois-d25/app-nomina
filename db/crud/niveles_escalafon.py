@@ -1,0 +1,6 @@
+from crud.base_crud import CRUDBase
+from models.niveles_escalafon_model import NivelesEscalafon
+from schemas.niveles_escalafon_schema import NivelesEscalafonCreate, NivelesEscalafonUpdate
+
+
+crud_nivelesEscalafon = CRUDBase[NivelesEscalafon, NivelesEscalafonCreate, NivelesEscalafonUpdate](NivelesEscalafon)

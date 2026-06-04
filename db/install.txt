@@ -1,0 +1,122 @@
+
+EN LA CARPETA DB
+1- creamos archivo .env copiando lo del example y actualizamos los campos db al acorde de nuestra db
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install -r requirements.txt
+py .\main.py
+
+
+
+
+
+tener el archivo .env en la carpeta db
+
+los schemas definen y validan el json que sale y entra de los endpoints
+
+los modelos son la representacion de la tabla (solo mapea las columnas no lleva metodos)
+
+en crud se coloca la logica del crud
+
+en utils iran funciones de hashing o verificacion
+
+ejecutar back: uvicorn main:app --reload
+
+
+
+
+========= ROLES Y PERMISOS SQL ==========
+
+-- =====================================================================
+-- SCRIPT DE CARGA DE ROLES, PERMISOS Y SUS RELACIONES (MATRIZ DE ACCESOS)
+-- =====================================================================
+
+USE nominas_db; -- Nombre de tu base de datos configurada en el .env
+
+-- 1. INSERTAR ROLES (Actualizado con tu nueva estructura)
+-- Usamos INSERT IGNORE por seguridad si ya existen registros previos
+INSERT IGNORE INTO roles (id, nombre, descripcion) VALUES
+(1, 'Administrador general', 'Control total del sistema'),
+(2, 'Administrador', 'Control parcial del sistema, no puede borrar registros, hacer auditorias o manipular los usuarios'),
+(3, 'Asistente', 'Solo puede visualizar información, realizar el calculo de nomina, editar informacion de contacto y asistencias');
+
+-- 2. INSERTAR PERMISOS (Mantenemos la nomenclatura limpia modulo:accion)
+INSERT IGNORE INTO permisos (nombre) VALUES
+-- Módulo: Usuarios
+('usuarios:crear'),
+('usuarios:ver'),
+('usuarios:editar'),
+('usuarios:eliminar'),
+-- Módulo: Empleados
+('empleados:crear'),
+('empleados:ver'),
+('empleados:editar'),
+('empleados:eliminar'),
+-- Módulo: Nóminas
+('nominas:crear'),
+('nominas:ver'),
+('nominas:editar'),
+('nominas:eliminar'),
+-- Módulo: Roles y Seguridad
+('roles:gestionar');
+
+
+-- 3. ASIGNACIÓN DE PERMISOS A ROLES (Tabla: rol_x_permiso)
+-- Limpiamos las relaciones previas para evitar duplicados en pruebas
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE rol_x_permiso;
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- Inserción masiva cruzando los nombres de roles y permisos mediante subconsultas
+INSERT INTO rol_x_permiso (rol_id, permiso_id) VALUES
+
+-- =====================================================================
+-- PERMISOS PARA: Administrador general (ID: 1 - CONTROL TOTAL)
+-- =====================================================================
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'usuarios:crear')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'usuarios:ver')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'usuarios:editar')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'usuarios:eliminar')),
+
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'empleados:crear')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'empleados:ver')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'empleados:editar')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'empleados:eliminar')),
+
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'nominas:crear')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'nominas:ver')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'nominas:editar')),
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'nominas:eliminar')),
+
+((SELECT id FROM roles WHERE nombre = 'Administrador general'), (SELECT id FROM permisos WHERE nombre = 'roles:gestionar')),
+
+-- =====================================================================
+-- PERMISOS PARA: Administrador (ID: 2 - SIN ELIMINAR O SEGURIDAD)
+-- =====================================================================
+-- Módulo Usuarios (Puede gestionar pero no eliminar)
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'usuarios:crear')),
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'usuarios:ver')),
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'usuarios:editar')),
+
+-- Módulo Empleados (Puede gestionar pero no eliminar)
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'empleados:crear')),
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'empleados:ver')),
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'empleados:editar')),
+
+-- Módulo Nóminas (Puede gestionar pero no eliminar)
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'nominas:crear')),
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'nominas:ver')),
+((SELECT id FROM roles WHERE nombre = 'Administrador'), (SELECT id FROM permisos WHERE nombre = 'nominas:editar')),
+
+-- =====================================================================
+-- PERMISOS PARA: Asistente (ID: 3 - LECTURA + PROCESOS DE NÓMINA)
+-- =====================================================================
+-- Solo visualiza información general
+((SELECT id FROM roles WHERE nombre = 'Asistente'), (SELECT id FROM permisos WHERE nombre = 'usuarios:ver')),
+((SELECT id FROM roles WHERE nombre = 'Asistente'), (SELECT id FROM permisos WHERE nombre = 'empleados:ver')),
+
+-- Puede registrar y editar asistencias, información de contacto y calcular nóminas
+((SELECT id FROM roles WHERE nombre = 'Asistente'), (SELECT id FROM permisos WHERE nombre = 'empleados:editar')),
+((SELECT id FROM roles WHERE nombre = 'Asistente'), (SELECT id FROM permisos WHERE nombre = 'nominas:crear')),
+((SELECT id FROM roles WHERE nombre = 'Asistente'), (SELECT id FROM permisos WHERE nombre = 'nominas:ver')),
+((SELECT id FROM roles WHERE nombre = 'Asistente'), (SELECT id FROM permisos WHERE nombre = 'nominas:editar'));

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pymysql
+alembic
+pydantic[email]
+python-dotenv
+bcrypt
+pyjwt
+httpx
+openpyxl
