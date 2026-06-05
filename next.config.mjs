@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Habilitar build standalone para Docker (genera server.js autocontenido)
+  output: 'standalone',
+
   // 1. Bloqueo para el React Compiler (Analizador de UI)
   reactCompiler: {
     sources: (filename) => {
