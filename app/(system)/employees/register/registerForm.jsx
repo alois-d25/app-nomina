@@ -107,7 +107,7 @@ export default function RegisterEmployeePage({ titulos, escalafones, reglas }) {
           salario_base: parseFloat(calculatedSalary)
         };
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const API_URL = "";
         await axios.post(`${API_URL}/api/empleados/`, payload);
 
         // Create cestaticket record for the employee

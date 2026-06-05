@@ -156,8 +156,7 @@ export default function NominaPage() {
 
       if (nomina?.id) {
         // Recalculate existing nomina
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-        const response = await fetch(`${API_URL}/api/nominas/${nomina.id}/recalcular`, {
+        const response = await fetch(`/api/nominas/${nomina.id}/recalcular`, {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include'
@@ -189,7 +188,7 @@ export default function NominaPage() {
     }
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/nominas/${nomina.id}/reporte`
+        `/api/nominas/${nomina.id}/reporte`
       );
       if (!response.ok) throw new Error("Error descargando reporte");
       const blob = await response.blob();
@@ -216,7 +215,7 @@ export default function NominaPage() {
     }
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/nominas/${nomina.id}/aprobar`,
+        `/api/nominas/${nomina.id}/aprobar`,
         { method: "POST" }
       );
       if (!response.ok) {

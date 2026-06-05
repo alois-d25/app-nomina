@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa6";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = "";
 const PAGE_SIZE = 20;
 
 const EMPTY_FILTERS = { tabla: "", accion: "", fechaDesde: "", fechaHasta: "" };

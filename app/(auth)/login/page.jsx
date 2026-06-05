@@ -57,8 +57,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -66,7 +64,7 @@ export default function LoginPage() {
 
     try {
       const response = await axios.post(
-        `${API_BASE}/api/login/login`,
+        `/api/login/login`,
         { email, password },
         { withCredentials: true }
       );

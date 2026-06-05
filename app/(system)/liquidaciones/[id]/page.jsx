@@ -11,7 +11,7 @@ export default function LiquidacionDetailPage() {
   const router = useRouter();
   const params = useParams();
   const liquidacionId = params.id;
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = "";
 
   const [liquidacion, setLiquidacion] = useState(null);
   const [empleado, setEmpleado] = useState(null);

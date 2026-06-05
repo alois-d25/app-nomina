@@ -25,7 +25,7 @@ const SalaryRules = ({rulesData, titulos, escalafones}) => {
     const [ruleToDelete, setRuleToDelete] = useState(null);
     const router = useRouter();
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API_URL = "";
     
     const refrescarReglas = async () => {
         try {
