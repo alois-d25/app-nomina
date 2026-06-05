@@ -1,0 +1,81 @@
+# ============================================================
+#  Docker Compose — Sistema de Nóminas
+#  Servicios: MySQL 8.0 + FastAPI Backend + Next.js Frontend
+# ============================================================
+
+services:
+  # ── Base de Datos MySQL ──────────────────────────────────────
+  db-mysql:
+    image: mysql:8.0
+    container_name: nomina-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - nomina-network
+
+  # ── Backend FastAPI (Python + Node.js para Sequelize) ───────
+  backend:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    container_name: nomina-backend
+    restart: unless-stopped
+    depends_on:
+      db-mysql:
+        condition: service_healthy
+    environment:
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db-mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      PUBLIC_PORT: 8000
+      SECRET_KEY: ${SECRET_KEY}
+      DOLAR_API_URL: ${DOLAR_API_URL}
+      NODE_ENV: production
+    ports:
+      - "8000:8000"
+    networks:
+      - nomina-network
+
+  # ── Frontend Next.js ────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: nomina-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    networks:
+      - nomina-network
+
+# ── Volúmenes persistentes ──────────────────────────────────
+volumes:
+  mysql_data:
+    driver: local
+
+# ── Red interna ─────────────────────────────────────────────
+networks:
+  nomina-network:
+    driver: bridge
