@@ -87,7 +87,7 @@ export default function EmployeesView({employeesData, escalafonesData, onReload 
     if (!employeeToDelete) return;
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const API_URL = "";
       
       await axios.delete(`${API_URL}/api/empleados/${employeeToDelete.cedula}`);
 

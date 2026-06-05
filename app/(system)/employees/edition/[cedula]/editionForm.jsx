@@ -69,7 +69,7 @@ export default function EditEmployeeForm({ employeeData, titulos, escalafones })
           salario_base: parseFloat(formData.baseSalary)
         };
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const API_URL = "";
         await axios.put(`${API_URL}/api/empleados/${employeeData.cedula}`, payload);
 
         toast.success("¡Datos actualizados exitosamente!");

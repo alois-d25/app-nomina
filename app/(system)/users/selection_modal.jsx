@@ -5,7 +5,7 @@ import { FaChevronLeft, FaChevronRight } from "react-icons/fa6";
 import axios from "axios";
 import { toast } from "react-toastify";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE = "";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const inputClassName = (error) =>

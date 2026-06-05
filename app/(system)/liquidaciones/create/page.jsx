@@ -9,7 +9,7 @@ import Link from "next/link";
 
 export default function CreateLiquidacionPage() {
   const router = useRouter();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = "";
 
   const [step, setStep] = useState(1); // 1: Input, 2: Draft Review, 3: Confirmation
   const [empleados, setEmpleados] = useState([]);

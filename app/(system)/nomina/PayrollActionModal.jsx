@@ -51,7 +51,7 @@ export default function PayrollActionModal({ isOpen, onClose, onSubmit, type, ed
           } else {
             // Fallback: fetch from API if relationshipsData not provided
             try {
-              const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+              const API_URL = "";
               const endpoint = type === "bono"
                 ? `${API_URL}/api/bonos_relaciones/empleados`
                 : `${API_URL}/api/deducciones_relaciones/empleados`;
