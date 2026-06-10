@@ -168,7 +168,7 @@ export default function RegisterEmployeePage({ titulos, escalafones, reglas }) {
             formData.tipoJornada === "horas" ? parseInt(formData.horasTrabajadas) || null : null,
         };
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
         //usa el endpoint default para crear el empleado
         await axios.post(`${API_URL}/api/empleados/`, payload);
 

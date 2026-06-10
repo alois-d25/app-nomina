@@ -73,6 +73,13 @@ export default async function DashboardLayout({ children }) {
       permission: PERMISSIONS.NOMINAS_EDITAR,
     },
     {
+      name: "Liquidaciones",
+      icon: <TfiWallet className="text-2xl"/>,
+      href: "/liquidaciones",
+      dataTip: "Liquidaciones",
+      permission: PERMISSIONS.NOMINAS_VER,
+    },
+    {
       name: "Registro de auditoria",
       icon: <MdOutlineAssignment className="text-2xl"/>,
       href: "/audits",

@@ -3,7 +3,7 @@ import axios from "axios";
 // Nota: En Next.js las variables NEXT_PUBLIC se cargan automáticamente.
 // No es necesario llamar a dotenv.config() en archivos del lado del cliente.
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://tu-api-externa.com/api";
+  process.env.NEXT_PUBLIC_API_URL || "";
 
 const axiosClient = axios.create({
   baseURL: API_URL + "/api",

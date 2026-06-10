@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import axios from 'axios';
 
 const AuthContext = createContext();
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 // Interceptor global: adjunta el token de localStorage en cada petición de axios.
 // (Cubre tanto el `axios` global usado en las vistas como cualquier llamada directa.)

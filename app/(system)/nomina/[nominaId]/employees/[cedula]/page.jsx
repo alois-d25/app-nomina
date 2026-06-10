@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import NominaEmpleadoDetalle from "./NominaEmpleadoDetalle";
 
-const API_URL = process.env.API_URL || "http://localhost:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function fetchDetalle(nominaId, cedula) {
   try {

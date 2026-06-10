@@ -15,7 +15,7 @@ export default function LiquidacionesPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [approvingId, setApprovingId] = useState(null);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
   const fetchLiquidaciones = useCallback(async () => {
     setLoading(true);

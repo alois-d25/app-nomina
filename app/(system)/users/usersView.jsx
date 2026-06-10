@@ -13,7 +13,7 @@ import EditionModal from "./edition_modal";
 import Can from "@/components/Can";
 import { PERMISSIONS } from "@/app/config/permissions";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 const UsersView = ({usersData, employeesData, userRoles, activeSessions}) => {
     const [statusFilter, setStatusFilter] = useState("");

@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { FaArrowLeft, FaCheck, FaDownload } from "react-icons/fa6";
 import Link from "next/link";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function fmt(n) {
   if (n == null || n === undefined) return "—";

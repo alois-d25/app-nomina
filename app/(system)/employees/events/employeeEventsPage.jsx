@@ -23,7 +23,7 @@ import Link from "next/link";
 const fmt = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 // Estilos por tipo de evento
 const EVENT_STYLES = {

@@ -10,7 +10,7 @@ import { BsPeopleFill } from "react-icons/bs";
 import { HiDotsVertical } from "react-icons/hi";
 import { FaSearch } from "react-icons/fa";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const ITEMS_PER_PAGE = 10;
 
 // Deducciones de ley (IVSS, LPH, Paro Forzoso/SPF, FAOV): no pueden editarse ni eliminarse.

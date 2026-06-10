@@ -19,7 +19,7 @@ export default function NominaEmpleadoDetalle({ detalle, employee }) {
     setIsDownloading(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/nominas/${detalle.nomina_id}/empleado/${detalle.empleado_cedula}/payslip`
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/nominas/${detalle.nomina_id}/empleado/${detalle.empleado_cedula}/payslip`
       );
       if (!response.ok) throw new Error("Error descargando recibo");
       const blob = await response.blob();

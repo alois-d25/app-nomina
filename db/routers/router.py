@@ -40,7 +40,6 @@ router.include_router(tasa_dolar_router.router, prefix='/tasa_dolar', tags=["Tas
 router.include_router(cestaticket_router.router, prefix='/cestaticket', tags=["Cestaticket"])
 router.include_router(liquidaciones_router.router, prefix='/liquidaciones', tags=["Liquidaciones"])
 router.include_router(auth_router.router, tags=["Login"])
-router.include_router(auth_router.router, tags=["Login"])
 router.include_router(auditoria_router.router, prefix='/auditorias', tags=["Auditorias"])
 router.include_router(roles_permisos_router.router, prefix='/roles', tags=["Autorizacion"])
 router.include_router(evento_empleado_router.router, prefix='/eventos_empleados', tags=["Eventos Empleados"])
