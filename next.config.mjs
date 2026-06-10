@@ -1,18 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Habilitar build standalone para Docker (genera server.js autocontenido)
-  output: 'standalone',
-
-  // Proxy inverso: /api/* → FastAPI en localhost:8000/api/*
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
-      },
-    ];
-  },
-
   // 1. Bloqueo para el React Compiler (Analizador de UI)
   reactCompiler: {
     sources: (filename) => {

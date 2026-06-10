@@ -49,20 +49,18 @@ def ensure_at_least(session, model, create_func, n=10):
 
 
 def seed_niveles(session):
-    # (id, nombre, descripcion, es_por_hora)
+    # (id, nombre, descripcion)
     data = [
-        (1, 'Directivo',       'Descripcion nivel 1', False),
-        (2, 'Profesor x hora', 'Descripcion nivel 2', True),
-        (3, 'Maestro',         'Descripcion nivel 3', False),
-        (4, 'Administrativo',  'Descripcion nivel 4', False),
-        (5, 'Servicio',        'Descripcion nivel 5', False),
+        (1, 'Directivo',       'Descripcion nivel 1'),
+        (2, 'Profesor x hora', 'Descripcion nivel 2'),
+        (3, 'Maestro',         'Descripcion nivel 3'),
+        (4, 'Administrativo',  'Descripcion nivel 4'),
+        (5, 'Servicio',        'Descripcion nivel 5'),
     ]
-    for id_val, nombre, desc, por_hora in data:
+    for id_val, nombre, desc in data:
         existente = session.query(NivelesEscalafon).filter_by(id=id_val).first()
         if not existente:
-            session.add(NivelesEscalafon(id=id_val, nombre=nombre, descripcion=desc, es_por_hora=por_hora))
-        else:
-            existente.es_por_hora = por_hora
+            session.add(NivelesEscalafon(id=id_val, nombre=nombre, descripcion=desc))
     session.commit()
     print("Seeded niveles_escalafon")
 
@@ -88,22 +86,26 @@ def seed_reglas(session):
     ensure_at_least(session, ReglasEscalafon, make)
 
 
-def _nivel_es_por_hora(session, nivel_id):
-    nivel = session.query(NivelesEscalafon).filter_by(id=nivel_id).first()
-    return bool(nivel and nivel.es_por_hora)
+# El tipo de jornada ahora es propiedad del empleado. Para sembrar datos de ejemplo
+# decidimos por nivel: el nivel 2 ("Profesor x hora") se paga por hora.
+NIVELES_POR_HORA = {2}
 
 
-def _jornada_por_nivel(session, nivel_id):
-    """Devuelve (dias_trabajados_semana, horas_trabajados_semana) según el nivel."""
-    if _nivel_es_por_hora(session, nivel_id):
-        return None, 16   # profesor x hora: 16 horas/semana por defecto
-    return 5, None        # resto: jornada de 5 días/semana
+def _es_por_hora_por_nivel(nivel_id):
+    return nivel_id in NIVELES_POR_HORA
+
+
+def _jornada_por_nivel(nivel_id):
+    """Devuelve (es_por_hora, dias_trabajados_semana, horas_trabajados_semana) según el nivel."""
+    if _es_por_hora_por_nivel(nivel_id):
+        return True, None, 16   # profesor x hora: 16 horas/semana por defecto
+    return False, 5, None       # resto: jornada de 5 días/semana
 
 
 def seed_empleados(session):
     # Master employee linked to the admin user
     if not session.query(Empleado).filter_by(cedula='28932122').first():
-        dias, horas = _jornada_por_nivel(session, 1)
+        es_por_hora, dias, horas = _jornada_por_nivel(1)
         session.add(Empleado(
             cedula='28932122',
             email='prueba@gmail.com',
@@ -117,6 +119,7 @@ def seed_empleados(session):
             salario_base=Decimal('400.00'),
             telefono='+1-555-0100',
             numero_cuenta='1234567890',
+            es_por_hora=es_por_hora,
             dias_trabajados_semana=dias,
             horas_trabajadas_semana=horas,
         ))
@@ -126,7 +129,7 @@ def seed_empleados(session):
     def make(idx):
         nivel_id = ((idx - 1) % max(1, _count(session, NivelesEscalafon))) + 1
         titulo_id = ((idx - 1) % max(1, _count(session, TitulosAcademicos))) + 1
-        dias, horas = _jornada_por_nivel(session, nivel_id)
+        es_por_hora, dias, horas = _jornada_por_nivel(nivel_id)
         return Empleado(
             cedula=f"V{idx:07d}",
             email=f"empleado{idx}@example.com",
@@ -140,6 +143,7 @@ def seed_empleados(session):
             salario_base=Decimal('100.00') + Decimal(idx),
             telefono=f'+1-555-{1000+idx:04d}',
             numero_cuenta=f'{10000000+idx:08d}',
+            es_por_hora=es_por_hora,
             dias_trabajados_semana=dias,
             horas_trabajadas_semana=horas,
         )

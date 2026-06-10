@@ -14,6 +14,7 @@ import {
 import { HiDotsVertical } from "react-icons/hi";
 import { EmployeeService } from "@/services/employee.service";
 import { EventService } from "@/services/event.service";
+import axiosClient from "@/services/axiosClient";
 import Can from "@/components/Can";
 import { PERMISSIONS } from "@/app/config/permissions";
 import Link from "next/link";
@@ -22,11 +23,14 @@ import Link from "next/link";
 const fmt = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 // Estilos por tipo de evento
 const EVENT_STYLES = {
   "inasistencia": "bg-error-container/50 border-error/30 text-on-error-container",
   "horas no laboradas": "bg-warning/20 border-warning/40 text-warning-content",
   "reposo": "bg-primary-container/40 border-primary/30 text-on-primary-container",
+  "vacaciones": "bg-success/20 border-success/40 text-on-surface-variant",
 };
 
 const EVENTS_PER_PAGE = 4;
@@ -89,7 +93,18 @@ export default function EmployeeEventsPage() {
     fecha_fin: "",
     cantidad: "",
     observacion: "",
+    dias_vacaciones: "",
+    dias_bono_vac: "",
+    monto_vacaciones_usd: "",
+    monto_bono_vac_usd: "",
   });
+
+  // Estado para cálculo de vacaciones
+  const [vacCalculo, setVacCalculo] = useState(null);
+  const [vacLoadingCalculo, setVacLoadingCalculo] = useState(false);
+  // Modal para editar días contractuales
+  const [showEditDiasModal, setShowEditDiasModal] = useState(false);
+  const [diasEditInput, setDiasEditInput] = useState("");
 
   /* ----- Carga inicial: empleados + tipos (una sola vez) ----- */
   useEffect(() => {
@@ -140,6 +155,39 @@ export default function EmployeeEventsPage() {
     fetchEventos();
   }, [fetchEventos]);
 
+  // Auto-calcular vacaciones cuando el tipo es vacaciones, hay empleado y fecha_inicio
+  useEffect(() => {
+    if (formData.tipo_evento !== "vacaciones" || !selectedEmployee || !formData.fecha_inicio) {
+      setVacCalculo(null);
+      return;
+    }
+    let cancelled = false;
+    const calcular = async () => {
+      setVacLoadingCalculo(true);
+      try {
+        const res = await axiosClient.get(`/eventos_empleados/vacaciones/calcular-dias`, {
+          params: { cedula: selectedEmployee.cedula, fecha_inicio: formData.fecha_inicio }
+        });
+        const data = res.data;
+        if (cancelled) return;
+        setVacCalculo(data);
+        setFormData((prev) => ({
+          ...prev,
+          dias_vacaciones: String(data.dias_vacaciones),
+          dias_bono_vac: String(data.dias_bono_vac),
+          monto_vacaciones_usd: String(data.monto_vacaciones_usd),
+          monto_bono_vac_usd: String(data.monto_bono_vac_usd),
+        }));
+      } catch {
+        if (!cancelled) toast.error("No se pudo calcular los días de vacaciones");
+      } finally {
+        if (!cancelled) setVacLoadingCalculo(false);
+      }
+    };
+    calcular();
+    return () => { cancelled = true; };
+  }, [formData.tipo_evento, formData.fecha_inicio, selectedEmployee]);
+
   // Tras una mutación (crear/editar/borrar) invalidamos todo el cache y recargamos
   const invalidarYRecargar = () => {
     monthCache.current = {};
@@ -176,7 +224,9 @@ export default function EmployeeEventsPage() {
       (map[dateStr] = map[dateStr] || []).push(ev);
     };
     for (const ev of events) {
-      if (ev.tipo_evento === "reposo" && ev.fecha_inicio && ev.fecha_fin) {
+      const esRango = (ev.tipo_evento === "reposo" || ev.tipo_evento === "vacaciones")
+                      && ev.fecha_inicio && ev.fecha_fin;
+      if (esRango) {
         let d = new Date(`${ev.fecha_inicio.slice(0, 10)}T00:00:00`);
         const end = new Date(`${ev.fecha_fin.slice(0, 10)}T00:00:00`);
         while (d <= end) {
@@ -222,8 +272,10 @@ export default function EmployeeEventsPage() {
   };
 
   /* ----- Registro / edición de evento ----- */
-  const resetForm = () =>
-    setFormData({ tipo_evento: "", fecha: "", fecha_inicio: "", fecha_fin: "", cantidad: "", observacion: "" });
+  const resetForm = () => {
+    setFormData({ tipo_evento: "", fecha: "", fecha_inicio: "", fecha_fin: "", cantidad: "", observacion: "", dias_vacaciones: "", dias_bono_vac: "", monto_vacaciones_usd: "", monto_bono_vac_usd: "" });
+    setVacCalculo(null);
+  };
 
   const handleOpenCreate = () => {
     setEventToEdit(null);
@@ -240,6 +292,10 @@ export default function EmployeeEventsPage() {
       fecha_fin: ev.fecha_fin ? ev.fecha_fin.slice(0, 10) : "",
       cantidad: ev.cantidad != null ? String(ev.cantidad) : "",
       observacion: ev.observacion || "",
+      dias_vacaciones: ev.dias_vacaciones != null ? String(ev.dias_vacaciones) : "",
+      dias_bono_vac: ev.dias_bono_vac != null ? String(ev.dias_bono_vac) : "",
+      monto_vacaciones_usd: ev.monto_vacaciones_usd != null ? String(ev.monto_vacaciones_usd) : "",
+      monto_bono_vac_usd: ev.monto_bono_vac_usd != null ? String(ev.monto_bono_vac_usd) : "",
     });
     setIsModalOpen(true);
   };
@@ -273,6 +329,19 @@ export default function EmployeeEventsPage() {
         toast.error("La fecha fin no puede ser anterior a la de inicio");
         return false;
       }
+    } else if (t === "vacaciones") {
+      if (!formData.fecha_inicio || !formData.fecha_fin) {
+        toast.error("Las vacaciones requieren fecha de inicio y fin");
+        return false;
+      }
+      if (formData.fecha_fin < formData.fecha_inicio) {
+        toast.error("La fecha fin no puede ser anterior a la de inicio");
+        return false;
+      }
+      if (!formData.dias_vacaciones || Number(formData.dias_vacaciones) <= 0) {
+        toast.error("Se requieren los días de vacaciones calculados");
+        return false;
+      }
     }
     return true;
   };
@@ -286,14 +355,21 @@ export default function EmployeeEventsPage() {
     if (!validar()) return;
 
     const t = formData.tipo_evento;
+    const esRango = t === "reposo" || t === "vacaciones";
     const payload = {
       empleado_cedula: selectedEmployee.cedula,
       tipo_evento: t,
-      fecha: t === "reposo" ? null : formData.fecha || null,
-      fecha_inicio: t === "reposo" ? formData.fecha_inicio : null,
-      fecha_fin: t === "reposo" ? formData.fecha_fin : null,
+      fecha: esRango ? null : formData.fecha || null,
+      fecha_inicio: esRango ? formData.fecha_inicio : null,
+      fecha_fin: esRango ? formData.fecha_fin : null,
       cantidad: t === "horas no laboradas" ? parseInt(formData.cantidad, 10) : null,
       observacion: formData.observacion || null,
+      ...(t === "vacaciones" && {
+        dias_vacaciones: parseInt(formData.dias_vacaciones, 10) || null,
+        dias_bono_vac: parseInt(formData.dias_bono_vac, 10) || null,
+        monto_vacaciones_usd: parseFloat(formData.monto_vacaciones_usd) || null,
+        monto_bono_vac_usd: parseFloat(formData.monto_bono_vac_usd) || null,
+      }),
     };
 
     setSaving(true);
@@ -338,6 +414,20 @@ export default function EmployeeEventsPage() {
   };
 
   const tipo = formData.tipo_evento;
+
+  // Tipos de evento visibles según el tipo de empleado:
+  // - por hora: solo "horas no laboradas" y "vacaciones"
+  // - por día:  todos menos "horas no laboradas"
+  const tiposVisibles = useMemo(() => {
+    const base = selectedEmployee?.es_por_hora
+      ? tipos.filter((t) => t === "horas no laboradas" || t === "vacaciones")
+      : tipos.filter((t) => t !== "horas no laboradas");
+    // Al editar, conservar el tipo del evento aunque ya no aplique al empleado
+    if (eventToEdit?.tipo_evento && !base.includes(eventToEdit.tipo_evento)) {
+      return [...base, eventToEdit.tipo_evento];
+    }
+    return base;
+  }, [tipos, selectedEmployee, eventToEdit]);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -473,10 +563,16 @@ export default function EmployeeEventsPage() {
                           )}
                         </div>
                         <p className="text-sm font-medium text-on-surface mt-2">
-                          {ev.tipo_evento === "reposo"
+                          {(ev.tipo_evento === "reposo" || ev.tipo_evento === "vacaciones")
                             ? `${formatoFecha(ev.fecha_inicio)} → ${formatoFecha(ev.fecha_fin)}`
                             : formatoFecha(ev.fecha)}
                         </p>
+                        {ev.tipo_evento === "vacaciones" && ev.dias_vacaciones && (
+                          <div className="mt-1 text-xs text-on-surface-variant grid grid-cols-2 gap-1">
+                            <span>Vacaciones: {ev.dias_vacaciones} días · ${Number(ev.monto_vacaciones_usd || 0).toFixed(2)}</span>
+                            <span>Bono vac.: {ev.dias_bono_vac} días · ${Number(ev.monto_bono_vac_usd || 0).toFixed(2)}</span>
+                          </div>
+                        )}
                         {ev.observacion && (
                           <p className="text-xs text-on-surface-variant mt-1">{ev.observacion}</p>
                         )}
@@ -598,7 +694,7 @@ export default function EmployeeEventsPage() {
                     required
                   >
                     <option value="" disabled>Seleccione un tipo...</option>
-                    {tipos.map((t) => (
+                    {tiposVisibles.map((t) => (
                       <option key={t} value={t} className="capitalize">{t}</option>
                     ))}
                   </select>
@@ -631,7 +727,7 @@ export default function EmployeeEventsPage() {
                   </div>
                 )}
 
-                {tipo === "reposo" && (
+                {(tipo === "reposo" || tipo === "vacaciones") && (
                   <>
                     <div className="form-control">
                       <label className="label"><span className="label-text font-bold text-on-surface-variant">Fecha inicio</span></label>
@@ -652,6 +748,61 @@ export default function EmployeeEventsPage() {
                       />
                     </div>
                   </>
+                )}
+
+                {tipo === "vacaciones" && (
+                  <div className="md:col-span-2">
+                    {vacLoadingCalculo && (
+                      <div className="flex items-center gap-2 text-sm text-on-surface-variant mb-2">
+                        <span className="loading loading-spinner loading-xs" /> Calculando beneficios vacacionales...
+                      </div>
+                    )}
+                    {vacCalculo && !vacLoadingCalculo && (
+                      <div className="bg-success/10 border border-success/30 rounded-xl p-4 flex flex-col gap-3">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold text-on-surface text-sm">Beneficios Vacacionales (LOTTT)</h4>
+                          <span className="text-xs text-on-surface-variant">{vacCalculo.anios_servicio} años de servicio</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="bg-surface-container rounded-lg p-2">
+                            <p className="text-xs text-on-surface-variant">Salario Integral/Día</p>
+                            <p className="font-bold">${Number(vacCalculo.sid_usd).toFixed(4)}</p>
+                            {vacCalculo.sid_bs && <p className="text-xs text-on-surface-variant">Bs. {Number(vacCalculo.sid_bs).toFixed(2)}</p>}
+                          </div>
+                          <div className="bg-surface-container rounded-lg p-2">
+                            <p className="text-xs text-on-surface-variant">Tasa utilizada</p>
+                            <p className="font-bold">{vacCalculo.tasa_bs ? `${Number(vacCalculo.tasa_bs).toFixed(2)} Bs/USD` : "No disponible"}</p>
+                            <p className="text-xs text-on-surface-variant capitalize">{vacCalculo.tasa_fuente}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="bg-surface-container rounded-lg p-2">
+                            <div className="flex flex-col gap-2 items-start">
+                              <p className="text-xs text-on-surface-variant">Días de vacaciones pagados</p>
+                              <button type="button" className="text-xs text-primary underline" onClick={() => { setDiasEditInput(formData.dias_vacaciones); setShowEditDiasModal(true); }}>
+                                Modificar
+                              </button>
+                            </div>
+                            <p className="font-bold">{formData.dias_vacaciones} días</p>
+                            <p className="text-xs text-on-surface-variant">${Number(formData.monto_vacaciones_usd).toFixed(2)} USD</p>
+                            {vacCalculo.monto_vacaciones_bs && <p className="text-xs text-on-surface-variant">Bs. {Number(vacCalculo.monto_vacaciones_bs * (parseInt(formData.dias_vacaciones) / vacCalculo.dias_vacaciones)).toFixed(2)}</p>}
+                          </div>
+                          <div className="bg-surface-container rounded-lg p-2">
+                            <p className="text-xs text-on-surface-variant">Días bono vacacional</p>
+                            <p className="font-bold">{formData.dias_bono_vac} días</p>
+                            <p className="text-xs text-on-surface-variant">${Number(formData.monto_bono_vac_usd).toFixed(2)} USD</p>
+                            {vacCalculo.monto_bono_vac_bs && <p className="text-xs text-on-surface-variant">Bs. {Number(vacCalculo.monto_bono_vac_bs).toFixed(2)}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {!vacCalculo && !vacLoadingCalculo && formData.fecha_inicio && (
+                      <div className="alert alert-warning text-xs py-2">Selecciona ambas fechas para calcular los beneficios.</div>
+                    )}
+                    {!formData.fecha_inicio && (
+                      <div className="alert alert-info text-xs py-2">Ingresa la fecha de inicio para calcular los días de vacaciones automáticamente.</div>
+                    )}
+                  </div>
                 )}
 
                 {/* Observación */}
@@ -678,6 +829,54 @@ export default function EmployeeEventsPage() {
               <button type="submit" form="event-form" disabled={saving} className="btn btn-primary rounded-xl font-bold px-8 shadow-md">
                 {saving ? <span className="loading loading-spinner loading-xs" /> : null}
                 {eventToEdit ? "Guardar cambios" : "Guardar Evento"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- Modal: editar días contractuales de vacaciones ---------- */}
+      {showEditDiasModal && (
+        <div className="fixed inset-0 z-60 bg-on-surface/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-secondary-container">
+              <h2 className="text-lg font-bold text-on-surface">Modificar días de vacaciones</h2>
+              <p className="text-sm text-on-surface-variant mt-1">
+                El mínimo legal según LOTTT es <strong>{vacCalculo?.dias_vacaciones ?? "—"} días</strong>. Puedes aumentar este valor según el contrato colectivo.
+              </p>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div className="form-control">
+                <label className="label"><span className="label-text font-bold">Días de vacaciones contractuales</span></label>
+                <input
+                  type="number"
+                  min={vacCalculo?.dias_vacaciones ?? 1}
+                  step="1"
+                  className="input input-bordered w-full rounded-xl"
+                  value={diasEditInput}
+                  onChange={(e) => setDiasEditInput(e.target.value)}
+                />
+              </div>
+              {vacCalculo && diasEditInput && (
+                <p className="text-sm text-on-surface-variant">
+                  Nuevo monto estimado: <strong>${(Number(diasEditInput) * Number(vacCalculo.sid_usd)).toFixed(2)} USD</strong>
+                </p>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-secondary-container flex justify-end gap-3">
+              <button className="btn btn-ghost" onClick={() => setShowEditDiasModal(false)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const dias = parseInt(diasEditInput, 10);
+                  if (!dias || dias <= 0) { toast.error("Ingrese un número válido"); return; }
+                  const nuevoMonto = vacCalculo ? (dias * Number(vacCalculo.sid_usd)) : parseFloat(formData.monto_vacaciones_usd);
+                  setFormData((prev) => ({ ...prev, dias_vacaciones: String(dias), monto_vacaciones_usd: String(nuevoMonto.toFixed(4)) }));
+                  setShowEditDiasModal(false);
+                  toast.success("Días de vacaciones actualizados");
+                }}
+              >
+                Confirmar
               </button>
             </div>
           </div>

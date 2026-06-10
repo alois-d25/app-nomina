@@ -106,6 +106,28 @@ export default function EmployeeDetailCard({ employee, nominaHistory }) {
                 RD$ {parseFloat(employee.salario_base).toFixed(2)}
               </p>
             </div>
+            <div>
+              <p className="text-label-sm text-on-surface-variant uppercase">
+                Tipo de Jornada
+              </p>
+              <p className="text-body-md text-on-surface font-medium">
+                {employee.es_por_hora ? "Por horas" : "Por días"}
+              </p>
+            </div>
+            <div>
+              <p className="text-label-sm text-on-surface-variant uppercase">
+                Jornada Semanal
+              </p>
+              <p className="text-body-md text-on-surface font-medium">
+                {employee.es_por_hora
+                  ? (employee.horas_trabajadas_semana != null
+                      ? `${employee.horas_trabajadas_semana} h/semana`
+                      : "No registrado")
+                  : (employee.dias_trabajados_semana != null
+                      ? `${employee.dias_trabajados_semana} días/semana`
+                      : "No registrado")}
+              </p>
+            </div>
           </div>
         </div>
       </div>

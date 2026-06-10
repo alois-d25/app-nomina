@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { FaPlus, FaChevronLeft, FaChevronRight, FaEye, FaCheck } from "react-icons/fa6";
+import { FaPlus, FaChevronLeft, FaChevronRight, FaEye, FaCheck, FaCircleCheck } from "react-icons/fa6";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -15,13 +15,13 @@ export default function LiquidacionesPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [approvingId, setApprovingId] = useState(null);
-  const API_URL = "";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const fetchLiquidaciones = useCallback(async () => {
     setLoading(true);
     try {
       const response = await axios.get(`${API_URL}/api/liquidaciones/`);
-      setLiquidaciones(response.data || []);
+      setLiquidaciones(response.data?.liquidaciones || []);
     } catch (error) {
       console.error("Error fetching liquidaciones:", error);
       toast.error("Error al cargar liquidaciones");
@@ -165,37 +165,33 @@ export default function LiquidacionesPage() {
                   </thead>
                   <tbody>
                     {currentLiquidaciones.map((liq) => (
-                      <tr key={liq.id} className="hover">
+                      <tr key={liq.liquidacion_id} className="hover">
                         <td>{liq.empleado_cedula}</td>
                         <td>{new Date(liq.fecha_egreso).toLocaleDateString("es-ES")}</td>
-                        <td>{liq.anios_totales}</td>
+                        <td>{Number(liq.anios_totales).toFixed(2)}</td>
                         <td className="font-mono">
-                          {parseFloat(liq.monto_total_bs).toFixed(2)} Bs
+                          {parseFloat(liq.monto_neto_bs ?? liq.monto_total_bs).toFixed(2)} Bs
                         </td>
                         <td>
-                          <span
-                            className={`badge badge-sm ${getEstadoBadgeColor(
-                              liq.estado
-                            )}`}
-                          >
+                          <span className={`badge badge-sm ${getEstadoBadgeColor(liq.estado)}`}>
                             {liq.estado}
                           </span>
                         </td>
                         <td className="space-x-2">
                           <Link
-                            href={`/liquidaciones/${liq.id}`}
+                            href={`/liquidaciones/${liq.liquidacion_id}`}
                             className="btn btn-ghost btn-sm"
                           >
                             <FaEye />
                           </Link>
                           {liq.estado === "Borrador" && (
                             <button
-                              onClick={() => handleApprove(liq.id)}
-                              disabled={approvingId === liq.id}
+                              onClick={() => handleApprove(liq.liquidacion_id)}
+                              disabled={approvingId === liq.liquidacion_id}
                               className="btn btn-success btn-sm"
                             >
-                              <FaCheckCircle />
-                              {approvingId === liq.id ? "Aprobando..." : ""}
+                              <FaCircleCheck />
+                              {approvingId === liq.liquidacion_id ? "Aprobando..." : ""}
                             </button>
                           )}
                         </td>

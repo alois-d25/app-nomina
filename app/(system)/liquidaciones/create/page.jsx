@@ -4,305 +4,410 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { FaArrowLeft, FaCalculator } from "react-icons/fa6";
+import { FaArrowLeft, FaCalculator, FaCheck } from "react-icons/fa6";
 import Link from "next/link";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+const CAUSAS = [
+  { value: "renuncia", label: "Renuncia" },
+  { value: "despido", label: "Despido" },
+  { value: "fin_contrato", label: "Fin de Contrato" },
+  { value: "jubilacion", label: "Jubilación" },
+];
+
+function fmt(n) {
+  if (n == null) return "—";
+  return Number(n).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function ConceptoRow({ label, dias, monto_bs, tasa, obs, destacado }) {
+  const monto_usd = tasa ? monto_bs / tasa : 0;
+  return (
+    <tr className={destacado ? "font-bold bg-primary/10" : ""}>
+      <td className="py-1 px-2 text-sm">{label}</td>
+      <td className="py-1 px-2 text-sm text-right tabular-nums">{dias != null ? fmt(dias) : "—"}</td>
+      <td className="py-1 px-2 text-sm text-right tabular-nums text-primary">Bs. {fmt(monto_bs)}</td>
+      <td className="py-1 px-2 text-sm text-right tabular-nums text-on-surface-variant">$ {fmt(monto_usd)}</td>
+      {obs !== undefined && <td className="py-1 px-2 text-xs text-on-surface-variant">{obs || ""}</td>}
+    </tr>
+  );
+}
 
 export default function CreateLiquidacionPage() {
   const router = useRouter();
-  const API_URL = "";
 
-  const [step, setStep] = useState(1); // 1: Input, 2: Draft Review, 3: Confirmation
+  const [step, setStep] = useState(1);
   const [empleados, setEmpleados] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [draftLoading, setDraftLoading] = useState(false);
+  const [tasaDolar, setTasaDolar] = useState(null);
+  const [calculating, setCalculating] = useState(false);
 
   const [formData, setFormData] = useState({
     empleado_cedula: "",
     fecha_egreso: "",
     causa_egreso: "",
+    saldo_deudor_prestamos: "",
+    tasa_activa_porcentaje: "",
   });
 
   const [draftData, setDraftData] = useState(null);
 
-  // Fetch employees on component mount
   useEffect(() => {
-    const fetchEmpleados = async () => {
+    const fetchInit = async () => {
       try {
-        const response = await axios.get(`${API_URL}/api/empleados/`);
-        setEmpleados(response.data || []);
-      } catch (error) {
-        console.error("Error fetching empleados:", error);
-        toast.error("Error al cargar empleados");
+        const [empRes, tasaRes] = await Promise.all([
+          axios.get(`${API_URL}/api/empleados/`),
+          axios.get(`${API_URL}/api/tasa_dolar/actual`),
+        ]);
+        setEmpleados(empRes.data || []);
+        if (tasaRes.data?.tasa) setTasaDolar(tasaRes.data.tasa);
+      } catch {
+        toast.error("Error al cargar datos iniciales");
       }
     };
-    fetchEmpleados();
-  }, [API_URL]);
+    fetchInit();
+  }, []);
 
-  const handleInputChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCalculateDraft = async () => {
-    if (!formData.empleado_cedula || !formData.fecha_egreso || !formData.causa_egreso) {
-      toast.error("Por favor complete todos los campos");
+  const handleCalcular = async () => {
+    const { empleado_cedula, fecha_egreso, causa_egreso } = formData;
+    if (!empleado_cedula || !fecha_egreso || !causa_egreso) {
+      toast.error("Complete todos los campos obligatorios");
       return;
     }
 
-    setDraftLoading(true);
-    try {
-      // For now, we'll create with the basic data
-      // Full calculation would fetch nomina history, loans, etc.
-      const empleado = empleados.find((e) => e.cedula === formData.empleado_cedula);
-      if (!empleado) {
-        toast.error("Empleado no encontrado");
-        return;
-      }
+    // La fecha de egreso no puede ser anterior al ingreso ni futura.
+    if (empleadoSeleccionado?.fecha_ingreso && fecha_egreso < empleadoSeleccionado.fecha_ingreso.slice(0, 10)) {
+      toast.error("La fecha de egreso no puede ser anterior a la fecha de ingreso");
+      return;
+    }
+    if (fecha_egreso > new Date().toISOString().slice(0, 10)) {
+      toast.error("La fecha de egreso no puede estar en el futuro");
+      return;
+    }
 
-      // Calculate years of service
-      const fechaIngreso = new Date(empleado.fecha_ingreso);
-      const fechaEgreso = new Date(formData.fecha_egreso);
-      const aniosTotales = Math.floor(
-        (fechaEgreso - fechaIngreso) / (1000 * 60 * 60 * 24 * 365)
+    const tasa = tasaDolar || 1;
+    const deudor = parseFloat(formData.saldo_deudor_prestamos) || 0;
+    const tasaActiva = parseFloat(formData.tasa_activa_porcentaje) || 0;
+
+    setCalculating(true);
+    try {
+      const params = new URLSearchParams({
+        fecha_egreso,
+        causa_egreso,
+        tasa_dolar: tasa,
+        saldo_deudor_prestamos: deudor,
+        tasa_activa_porcentaje: tasaActiva,
+      });
+
+      const res = await axios.post(
+        `${API_URL}/api/liquidaciones/crear/${empleado_cedula}?${params.toString()}`
       );
 
-      // TODO: Fetch actual nomina history and calculate real amounts
-      // For now, use a simple calculation
-      const salarioBase = parseFloat(empleado.salario_base) || 0;
-      const montoTotalBs = salarioBase * aniosTotales;
-      const exchangeRate = 36.5; // TODO: Fetch current exchange rate
-      const montoTotalUsd = montoTotalBs / exchangeRate;
+      const liq = res.data?.liquidacion;
+      if (!liq) throw new Error("Respuesta inesperada del servidor");
 
-      setDraftData({
-        empleado_cedula: formData.empleado_cedula,
-        fecha_egreso: formData.fecha_egreso,
-        anios_totales: aniosTotales,
-        monto_total_bs: montoTotalBs.toFixed(2),
-        monto_total_usd: montoTotalUsd.toFixed(2),
-        causa_egreso: formData.causa_egreso,
-        empleado_nombre: `${empleado.nombre} ${empleado.apellido}`,
-        salario_base: salarioBase.toFixed(2),
-      });
-
+      setDraftData(liq);
       setStep(2);
-    } catch (error) {
-      console.error("Error calculating draft:", error);
-      toast.error("Error al calcular liquidación");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || "Error al calcular la liquidación");
     } finally {
-      setDraftLoading(false);
+      setCalculating(false);
     }
   };
 
-  const handleCreateLiquidacion = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.post(`${API_URL}/api/liquidaciones/`, {
-        empleado_cedula: formData.empleado_cedula,
-        fecha_egreso: formData.fecha_egreso,
-        causa_egreso: formData.causa_egreso,
-        anios_totales: draftData.anios_totales,
-        monto_total_bs: parseFloat(draftData.monto_total_bs),
-        monto_total_usd: parseFloat(draftData.monto_total_usd),
-        estado: "Borrador",
-      });
-
-      toast.success("Liquidación creada exitosamente");
-      router.push(`/liquidaciones/${response.data.id}`);
-    } catch (error) {
-      console.error("Error creating liquidacion:", error);
-      toast.error("Error al crear liquidación");
-    } finally {
-      setLoading(false);
-    }
+  const handleConfirmar = () => {
+    router.push(`/liquidaciones/${draftData.liquidacion_id}`);
   };
+
+  const empleadoSeleccionado = empleados.find((e) => e.cedula === formData.empleado_cedula);
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="p-4 md:p-8">
-        {/* Header */}
+      <div className="p-4 md:p-8 max-w-4xl mx-auto w-full">
         <div className="flex items-center gap-4 mb-8">
           <Link href="/liquidaciones" className="btn btn-ghost btn-sm">
             <FaArrowLeft /> Volver
           </Link>
-          <h2 className="text-2xl font-bold text-base-content">
-            Nueva Liquidación
-          </h2>
+          <h2 className="text-2xl font-bold text-base-content">Nueva Liquidación</h2>
         </div>
 
-        <div className="card bg-surface-container-lowest rounded-md shadow-xl">
-          <div className="card-body space-y-6">
-            {/* Step Indicator */}
-            <div className="steps w-full">
-              <div className={`step ${step >= 1 ? "step-primary" : ""}`}>
-                Información
+        {/* Indicador de pasos */}
+        <ul className="steps w-full mb-8">
+          <li className={`step ${step >= 1 ? "step-primary" : ""}`}>Información</li>
+          <li className={`step ${step >= 2 ? "step-primary" : ""}`}>Revisar Cálculo</li>
+          <li className={`step ${step >= 3 ? "step-primary" : ""}`}>Confirmar</li>
+        </ul>
+
+        {/* ── Paso 1: Datos ──────────────────────────────────────────────── */}
+        {step === 1 && (
+          <div className="card bg-surface-container-lowest rounded-md shadow-xl">
+            <div className="card-body space-y-4">
+              <h3 className="font-semibold text-lg">Datos de Egreso</h3>
+
+              <div className="form-control">
+                <label className="label"><span className="label-text">Empleado *</span></label>
+                <select name="empleado_cedula" value={formData.empleado_cedula} onChange={handleChange} className="select select-bordered w-full">
+                  <option value="">Seleccionar empleado...</option>
+                  {empleados.map((e) => (
+                    <option key={e.cedula} value={e.cedula}>
+                      {e.cedula} — {e.nombre} {e.apellido}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className={`step ${step >= 2 ? "step-primary" : ""}`}>
-                Revisar Cálculo
+
+              {empleadoSeleccionado && (
+                <div className="bg-base-200/60 rounded-md p-3 text-sm space-y-1">
+                  <p><span className="font-medium">Ingreso:</span> {new Date(empleadoSeleccionado.fecha_ingreso).toLocaleDateString("es-ES")}</p>
+                  <p><span className="font-medium">Salario base:</span> Bs. {fmt(empleadoSeleccionado.salario_base)}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="form-control">
+                  <label className="label"><span className="label-text">Fecha de Egreso *</span></label>
+                  <input type="date" name="fecha_egreso" value={formData.fecha_egreso} onChange={handleChange} className="input input-bordered w-full" />
+                </div>
+
+                <div className="form-control">
+                  <label className="label"><span className="label-text">Causa de Egreso *</span></label>
+                  <select name="causa_egreso" value={formData.causa_egreso} onChange={handleChange} className="select select-bordered w-full">
+                    <option value="">Seleccionar causa...</option>
+                    {CAUSAS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
               </div>
-              <div className={`step ${step >= 3 ? "step-primary" : ""}`}>
-                Confirmar
+
+              <div className="divider text-sm text-on-surface-variant">Información adicional</div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Saldo deudor préstamos (Bs)</span>
+                    <span className="label-text-alt text-on-surface-variant">0 si no aplica</span>
+                  </label>
+                  <input type="number" name="saldo_deudor_prestamos" min="0" step="0.01" value={formData.saldo_deudor_prestamos} onChange={handleChange} placeholder="0.00" className="input input-bordered w-full" />
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Tasa activa BCV (%)</span>
+                    <span className="label-text-alt text-on-surface-variant">Para intereses</span>
+                  </label>
+                  <input type="number" name="tasa_activa_porcentaje" min="0" max="100" step="0.1" value={formData.tasa_activa_porcentaje} onChange={handleChange} placeholder="ej: 15.5" className="input input-bordered w-full" />
+                </div>
+              </div>
+
+              {tasaDolar && (
+                <p className="text-xs text-on-surface-variant">
+                  Tasa BCV actual: <strong>Bs. {fmt(tasaDolar)}</strong> / USD
+                </p>
+              )}
+
+              <button onClick={handleCalcular} disabled={calculating} className="btn btn-primary w-full mt-2">
+                <FaCalculator />
+                {calculating ? "Calculando..." : "Calcular Liquidación"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Paso 2: Desglose ───────────────────────────────────────────── */}
+        {step === 2 && draftData && (
+          <div className="space-y-6">
+            {/* Datos base */}
+            <div className="card bg-surface-container-lowest rounded-md shadow-xl">
+              <div className="card-body">
+                <h3 className="font-semibold text-lg mb-3">Datos Base del Cálculo</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                  {[
+                    ["Empleado", draftData.empleado_nombre || draftData.empleado_cedula],
+                    ["Salario Base", `Bs. ${fmt(draftData.empleado_salario_base)}`],
+                    ["Años de Servicio", `${Number(draftData.anios_totales).toFixed(2)} años`],
+                    ["Salario Integral/Día", `Bs. ${fmt(draftData.salario_integral_dia)}`],
+                  ].map(([k, v]) => (
+                    <div key={k} className="bg-base-200/50 rounded-md p-2">
+                      <p className="text-on-surface-variant text-xs">{k}</p>
+                      <p className="font-semibold">{v}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Step 1: Input */}
-            {step === 1 && (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Información de Egreso</h3>
+            {/* Prestaciones sociales Art. 142 */}
+            <div className="card bg-surface-container-lowest rounded-md shadow-xl">
+              <div className="card-body">
+                <h3 className="font-semibold text-lg mb-3">Prestaciones Sociales (Art. 142 LOTTT)</h3>
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-xs text-on-surface-variant border-b border-outline-variant">
+                      <th className="py-1 px-2 text-left">Concepto</th>
+                      <th className="py-1 px-2 text-right">Monto (Bs)</th>
+                      <th className="py-1 px-2 text-right">Monto (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <ConceptoRow
+                      label={`Escenario A — Depósitos trimestrales + adicionales${draftData.escenario_aplicado === "A" ? " ✓" : ""}`}
+                      monto_bs={draftData.escenario_a_bs}
+                      tasa={draftData.tasa_dolar}
+                    />
+                    <ConceptoRow
+                      label={`Escenario B — SID × 30 días × ${Number(draftData.anios_totales).toFixed(2)} años${draftData.escenario_aplicado === "B" ? " ✓" : ""}`}
+                      monto_bs={draftData.escenario_b_bs}
+                      tasa={draftData.tasa_dolar}
+                    />
+                    <ConceptoRow
+                      label={`Prestaciones Sociales (Escenario ${draftData.escenario_aplicado} — el mayor)`}
+                      monto_bs={draftData.prestaciones_bs}
+                      tasa={draftData.tasa_dolar}
+                      destacado
+                    />
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Empleado</span>
-                  </label>
-                  <select
-                    name="empleado_cedula"
-                    value={formData.empleado_cedula}
-                    onChange={handleInputChange}
-                    className="select select-bordered w-full"
-                  >
-                    <option value="">Seleccionar empleado...</option>
-                    {empleados.map((emp) => (
-                      <option key={emp.cedula} value={emp.cedula}>
-                        {emp.cedula} - {emp.nombre} {emp.apellido}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            {/* Conceptos fraccionados */}
+            <div className="card bg-surface-container-lowest rounded-md shadow-xl">
+              <div className="card-body">
+                <h3 className="font-semibold text-lg mb-3">Conceptos Fraccionados</h3>
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-xs text-on-surface-variant border-b border-outline-variant">
+                      <th className="py-1 px-2 text-left">Concepto</th>
+                      <th className="py-1 px-2 text-right">Días</th>
+                      <th className="py-1 px-2 text-right">Monto (Bs)</th>
+                      <th className="py-1 px-2 text-right">Monto (USD)</th>
+                      <th className="py-1 px-2 text-left">Detalle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ["Vacaciones Fraccionadas", "vacaciones_fracc_bs", "vacaciones_fraccionadas"],
+                      ["Bono Vacacional Fraccionado", "bono_vac_fracc_bs", "bono_vac_fraccionado"],
+                      ["Utilidades Fraccionadas", "utilidades_fracc_bs", "utilidades_fraccionadas"],
+                      ["Salarios Pendientes", "salarios_pendientes_bs", "salarios_pendientes"],
+                      ["Intereses de Prestaciones", "intereses_bs", "intereses"],
+                    ].map(([label, field, concepto]) => {
+                      const linea = draftData.desglose?.find((d) => d.concepto === concepto) || {};
+                      return (
+                        <ConceptoRow
+                          key={field}
+                          label={label}
+                          dias={linea.cantidad_dias}
+                          monto_bs={draftData[field] ?? 0}
+                          tasa={draftData.tasa_dolar}
+                          obs={linea.observacion}
+                        />
+                      );
+                    })}
+                    <ConceptoRow
+                      label="SUBTOTAL INGRESOS"
+                      monto_bs={draftData.monto_total_bs}
+                      tasa={draftData.tasa_dolar}
+                      destacado
+                    />
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Fecha de Egreso</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="fecha_egreso"
-                    value={formData.fecha_egreso}
-                    onChange={handleInputChange}
-                    className="input input-bordered w-full"
-                  />
-                </div>
-
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Causa de Egreso</span>
-                  </label>
-                  <select
-                    name="causa_egreso"
-                    value={formData.causa_egreso}
-                    onChange={handleInputChange}
-                    className="select select-bordered w-full"
-                  >
-                    <option value="">Seleccionar causa...</option>
-                    <option value="Renuncia">Renuncia</option>
-                    <option value="Despido">Despido</option>
-                    <option value="Fin de Contrato">Fin de Contrato</option>
-                  </select>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={handleCalculateDraft}
-                    disabled={draftLoading}
-                    className="btn btn-primary flex-1"
-                  >
-                    <FaCalculator />
-                    {draftLoading ? "Calculando..." : "Calcular Liquidación"}
-                  </button>
+            {/* Deducciones */}
+            {(draftData.saldo_deudor_bs > 0) && (
+              <div className="card bg-surface-container-lowest rounded-md shadow-xl border border-error/30">
+                <div className="card-body">
+                  <h3 className="font-semibold text-lg mb-3 text-error">Deducciones</h3>
+                  <div className="flex justify-between text-sm">
+                    <span>Saldo Deudor Préstamos y Anticipos</span>
+                    <span className="font-bold text-error">- Bs. {fmt(draftData.saldo_deudor_bs)}</span>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Step 2: Review Draft */}
-            {step === 2 && draftData && (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Revisar Cálculo</h3>
-
-                <div className="bg-base-200/50 p-4 rounded-lg space-y-2">
+            {/* Resumen final */}
+            <div className="card bg-primary/10 border border-primary/30 rounded-md shadow-xl">
+              <div className="card-body">
+                <h3 className="font-semibold text-lg mb-3">Resumen Final</h3>
+                <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span>Empleado:</span>
-                    <span className="font-semibold">{draftData.empleado_nombre}</span>
+                    <span>Total Bruto</span>
+                    <span className="font-semibold">Bs. {fmt(draftData.monto_total_bs)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Cédula:</span>
-                    <span className="font-semibold">{draftData.empleado_cedula}</span>
+                  {draftData.saldo_deudor_bs > 0 && (
+                    <div className="flex justify-between text-error">
+                      <span>(-) Deducciones</span>
+                      <span className="font-semibold">Bs. {fmt(draftData.saldo_deudor_bs)}</span>
+                    </div>
+                  )}
+                  <div className="divider my-1" />
+                  <div className="flex justify-between text-lg font-bold text-primary">
+                    <span>NETO A PAGAR</span>
+                    <span>Bs. {fmt(draftData.monto_neto_bs)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Fecha Ingreso a Egreso:</span>
-                    <span className="font-semibold">{draftData.anios_totales} años</span>
+                  <div className="flex justify-between text-primary">
+                    <span></span>
+                    <span>$ {fmt(draftData.monto_neto_usd)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Salario Base:</span>
-                    <span className="font-semibold">Bs. {draftData.salario_base}</span>
-                  </div>
-                  <div className="divider my-2"></div>
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total (Bs):</span>
-                    <span className="text-primary">Bs. {draftData.monto_total_bs}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total (USD):</span>
-                    <span className="text-primary">$ {draftData.monto_total_usd}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Causa Egreso:</span>
-                    <span className="font-semibold">{draftData.causa_egreso}</span>
-                  </div>
-                </div>
-
-                <div className="alert alert-info">
-                  <span>
-                    Nota: Este cálculo es una aproximación. El monto final
-                    dependerá de deducciones pendientes, préstamos y anticipos.
-                  </span>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="btn btn-ghost flex-1"
-                  >
-                    Volver
-                  </button>
-                  <button
-                    onClick={() => setStep(3)}
-                    className="btn btn-primary flex-1"
-                  >
-                    Continuar
-                  </button>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Step 3: Confirmation */}
-            {step === 3 && draftData && (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Confirmar Liquidación</h3>
-
-                <div className="alert alert-warning">
-                  <span>
-                    ¿Está seguro de crear esta liquidación? El empleado
-                    podrá ser revisado por el administrador de nóminas.
-                  </span>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setStep(2)}
-                    className="btn btn-ghost flex-1"
-                  >
-                    Volver
-                  </button>
-                  <button
-                    onClick={handleCreateLiquidacion}
-                    disabled={loading}
-                    className="btn btn-success flex-1"
-                  >
-                    {loading ? "Creando..." : "Crear Liquidación"}
-                  </button>
-                </div>
-              </div>
-            )}
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="btn btn-ghost flex-1">Volver</button>
+              <button onClick={() => setStep(3)} className="btn btn-primary flex-1">Continuar</button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ── Paso 3: Confirmar ──────────────────────────────────────────── */}
+        {step === 3 && draftData && (
+          <div className="card bg-surface-container-lowest rounded-md shadow-xl">
+            <div className="card-body space-y-4">
+              <h3 className="font-semibold text-lg">Confirmar Liquidación</h3>
+
+              <div className="alert alert-success">
+                <FaCheck />
+                <span>La liquidación fue calculada y guardada como <strong>Borrador</strong>. Al confirmar, podrás aprobarla desde la pantalla de detalle.</span>
+              </div>
+
+              <div className="bg-base-200/50 rounded-md p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Empleado:</span>
+                  <span className="font-semibold">{draftData.empleado_nombre || draftData.empleado_cedula}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Fecha de Egreso:</span>
+                  <span className="font-semibold">{new Date(draftData.fecha_egreso).toLocaleDateString("es-ES")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Escenario Aplicado:</span>
+                  <span className="font-semibold">Art. 142 — Escenario {draftData.escenario_aplicado}</span>
+                </div>
+                <div className="divider my-1" />
+                <div className="flex justify-between text-base font-bold text-primary">
+                  <span>Neto a Pagar:</span>
+                  <span>Bs. {fmt(draftData.monto_neto_bs)} / $ {fmt(draftData.monto_neto_usd)}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setStep(2)} className="btn btn-ghost flex-1">Ver desglose</button>
+                <button onClick={handleConfirmar} className="btn btn-success flex-1">
+                  <FaCheck /> Ir al detalle
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import DashboardPage from "./dashboardPage";
 const EMPTY = {
     total_empleados: 0,
     empleados_activos: 0,
-    gastos_mensuales_bs: 0,
+    gastos_mensuales_usd: 0,
     tasa_actual: null,
     tasa_tipo: null,
     ultimas_nominas: [],

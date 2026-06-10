@@ -1,6 +1,7 @@
 # auditoria_crud.py
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List
+from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 from crud.base_crud import CRUDBase
 from models.auditoria_model import Auditoria, AccionAuditoria
@@ -9,6 +10,38 @@ from models.empleado_model import Empleado
 from schemas.auditoria_schema import AuditoriaCreate, AuditoriaUpdate
 
 class CRUDAuditoria(CRUDBase[Auditoria, AuditoriaCreate, AuditoriaUpdate]):
+
+    def contar_sesiones_activas(self, db: Session, ventana_horas: int = 24) -> int:
+        """Cuenta las sesiones activas: usuarios cuyo último evento de auth es un
+        LOGIN dentro de la ventana de vida del token (por defecto 24h)."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=ventana_horas)
+
+        # Por cada usuario, la fecha de su último evento de sesión (LOGIN/LOGOUT)
+        ultimo_evento = (
+            db.query(
+                Auditoria.usuario_id.label("usuario_id"),
+                func.max(Auditoria.fecha).label("ultima_fecha"),
+            )
+            .filter(Auditoria.accion.in_([AccionAuditoria.LOGIN, AccionAuditoria.LOGOUT]))
+            .filter(Auditoria.usuario_id.isnot(None))
+            .group_by(Auditoria.usuario_id)
+            .subquery()
+        )
+
+        # Contamos los usuarios cuyo último evento es un LOGIN dentro de la ventana
+        total = (
+            db.query(func.count(distinct(Auditoria.usuario_id)))
+            .join(
+                ultimo_evento,
+                (Auditoria.usuario_id == ultimo_evento.c.usuario_id)
+                & (Auditoria.fecha == ultimo_evento.c.ultima_fecha),
+            )
+            .filter(Auditoria.accion == AccionAuditoria.LOGIN)
+            .filter(Auditoria.fecha >= cutoff)
+            .scalar()
+        )
+
+        return total or 0
 
     def get_auditorias_con_detalles(
         self,

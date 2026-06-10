@@ -78,15 +78,10 @@ async def audit_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-default_origins = [
+origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://0.0.0.0:3000",
 ]
-
-# Permite agregar orígenes extra via variable de entorno (separados por coma)
-extra_origins = os.getenv("CORS_ORIGINS", "")
-origins = default_origins + [o.strip() for o in extra_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,

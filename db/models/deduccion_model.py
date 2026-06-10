@@ -14,12 +14,14 @@ class FormulaCalculo(str, enum.Enum):
     spf    → salario_base * 12 / 52 * 0.005 * 4
     lph    → salario_base * 0.01
     faov   → salario_integral * 0.01  (integral = base + alicuotas utilidades + bono vacacional)
+    prestamo → uses stored monto (pre-calculated monthly installment)
     """
     manual = "manual"
     ivss   = "ivss"
     spf    = "spf"
     lph    = "lph"
     faov   = "faov"
+    prestamo = "prestamo"
 
 
 class Deduccion(Base, AuditMixin):
@@ -37,7 +39,6 @@ class Deduccion(Base, AuditMixin):
     observacion = Column(Text, nullable=True)
     tipo_pago = Column(SQLEnum('unico', 'quincenal', 'mensual', name='tipo_pago_enum'), nullable=False)
     fecha = Column(Date, nullable=True)
-    fecha_inicio = Column(Date, nullable=True)
     fecha_fin = Column(Date, nullable=True)
 
 class DeduccionEmpleado(Base, AuditMixin):

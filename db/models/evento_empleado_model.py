@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Date, Enum, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, Enum, Text, ForeignKey, Numeric
 from models.base_model import Base
 from utils.mixins import AuditMixin
 
@@ -8,6 +8,7 @@ class TipoEvento(str, enum.Enum):
     inasistencia = "inasistencia"
     horas_no_laboradas = "horas no laboradas"
     reposo = "reposo"
+    vacaciones = "vacaciones"
 
 
 class EventoEmpleado(Base, AuditMixin):
@@ -18,7 +19,7 @@ class EventoEmpleado(Base, AuditMixin):
     # Fecha simple: la usan 'inasistencia' y 'horas no laboradas'
     fecha = Column(Date, nullable=True)
 
-    # Rango: lo usa 'reposo'
+    # Rango: lo usan 'reposo' y 'vacaciones'
     fecha_inicio = Column(Date, nullable=True)
     fecha_fin = Column(Date, nullable=True)
 
@@ -35,6 +36,12 @@ class EventoEmpleado(Base, AuditMixin):
         nullable=False
     )
 
-    # Días u horas no laboradas (entero)
+    # Días u horas no laboradas (inasistencia, horas no laboradas)
     cantidad = Column(Integer, nullable=True)
     observacion = Column(Text, nullable=True)
+
+    # Campos exclusivos para tipo_evento = 'vacaciones'
+    dias_vacaciones    = Column(Integer,       nullable=True)   # días de descanso (editables)
+    dias_bono_vac      = Column(Integer,       nullable=True)   # días de bono vacacional
+    monto_vacaciones_usd = Column(Numeric(14, 4), nullable=True)  # snapshot en USD
+    monto_bono_vac_usd   = Column(Numeric(14, 4), nullable=True)  # snapshot en USD

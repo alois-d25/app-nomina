@@ -35,7 +35,16 @@ function StatusBadge({ status }) {
   );
 }
 
-const itemsPerPage = 5; 
+/**
+ * Devuelve la etiqueta legible del estado del empleado (misma lógica que StatusBadge).
+ */
+function getEstadoLabel(estado) {
+  if (estado === "activo") return "Activo";
+  if (estado === "inactivo") return "Inactivo";
+  return "En Permiso";
+}
+
+const itemsPerPage = 5;
 
 export default function EmployeesView({employeesData, escalafonesData, onReload }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,15 +88,75 @@ export default function EmployeesView({employeesData, escalafonesData, onReload 
   const formatSalary = (salary) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD", 
+      currency: "USD",
     }).format(salary);
+  };
+
+  const getEscalafonNombre = (nivelId) =>
+    escalafonesData.find((e) => e.id === nivelId)?.nombre || "No asignado";
+
+  const handleExportPDF = async () => {
+    if (filteredEmployees.length === 0) {
+      toast.info("No hay empleados para exportar");
+      return;
+    }
+
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+
+      const doc = new jsPDF();
+      const fecha = new Date().toLocaleDateString("es-VE");
+
+      // Título del reporte (estilo del Excel de nómina)
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("Listado de Empleados", 14, 18);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generado: ${fecha}`, 14, 25);
+
+      const head = [
+        ["Empleado", "Cédula", "Ingreso", "Nivel escalafón", "Salario Base", "Estado"],
+      ];
+
+      const body = filteredEmployees.map((employee) => [
+        `${employee.nombre} ${employee.apellido}\n${employee.email}`,
+        `V${employee.cedula}`,
+        employee.fecha_ingreso,
+        getEscalafonNombre(employee.nivel_escalafon_id),
+        formatSalary(employee.salario_base),
+        getEstadoLabel(employee.estado),
+      ]);
+
+      autoTable(doc, {
+        head,
+        body,
+        startY: 30,
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: {
+          fillColor: [54, 96, 146],
+          textColor: 255,
+          fontStyle: "bold",
+          halign: "center",
+        },
+      });
+
+      doc.save(`listado-empleados-${new Date().toISOString().slice(0, 10)}.pdf`);
+
+      toast.success("Listado exportado correctamente");
+    } catch (error) {
+      console.error("Error al exportar el listado:", error);
+      toast.error("No se pudo exportar el listado de empleados");
+    }
   };
 
   const handleDelete = async () => {
     if (!employeeToDelete) return;
 
     try {
-      const API_URL = "";
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       
       await axios.delete(`${API_URL}/api/empleados/${employeeToDelete.cedula}`);
 
@@ -118,7 +187,7 @@ export default function EmployeesView({employeesData, escalafonesData, onReload 
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="btn btn-warning">
+          <button className="btn btn-warning" onClick={handleExportPDF}>
             <FaDownload></FaDownload>
             Exportar
           </button>
@@ -211,7 +280,7 @@ export default function EmployeesView({employeesData, escalafonesData, onReload 
                   </td>
                   <td className="hidden sm:table-cell">V{employee.cedula}</td>
                   <td className="hidden md:table-cell">{employee.fecha_ingreso}</td>
-                  <td className="hidden sm:table-cell">{escalafonesData.find(e => e.id === employee.nivel_escalafon_id)?.nombre || "No asignado"}</td>
+                  <td className="hidden sm:table-cell">{getEscalafonNombre(employee.nivel_escalafon_id)}</td>
                   <td className="font-mono hidden sm:table-cell">
                     {formatSalary(employee.salario_base)}
                   </td>
@@ -366,7 +435,7 @@ export default function EmployeesView({employeesData, escalafonesData, onReload 
               <div>
                 <p className="text-sm font-semibold text-base-content/60">Nivel de Escalafón</p>
                 <p className="text-lg">
-                  {escalafonesData.find(e => e.id === employeeToView.nivel_escalafon_id)?.nombre || "No asignado"}
+                  {getEscalafonNombre(employeeToView.nivel_escalafon_id)}
                 </p>
               </div>
 
@@ -383,6 +452,24 @@ export default function EmployeesView({employeesData, escalafonesData, onReload 
               <div>
                 <p className="text-sm font-semibold text-base-content/60">Número de Cuenta</p>
                 <p className="text-lg">{employeeToView.numero_cuenta || "No registrado"}</p>
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-base-content/60">Tipo de Jornada</p>
+                <p className="text-lg">{employeeToView.es_por_hora ? "Por horas" : "Por días"}</p>
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-base-content/60">Jornada Semanal</p>
+                <p className="text-lg">
+                  {employeeToView.es_por_hora
+                    ? (employeeToView.horas_trabajadas_semana != null
+                        ? `${employeeToView.horas_trabajadas_semana} h/semana`
+                        : "No registrado")
+                    : (employeeToView.dias_trabajados_semana != null
+                        ? `${employeeToView.dias_trabajados_semana} días/semana`
+                        : "No registrado")}
+                </p>
               </div>
             </div>
           )}

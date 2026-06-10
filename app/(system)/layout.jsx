@@ -66,13 +66,6 @@ export default async function DashboardLayout({ children }) {
       permission: PERMISSIONS.NOMINAS_VER,
     },
     {
-      name: "Liquidaciones",
-      icon: <TfiWallet className="text-2xl"/>,
-      href: "/liquidaciones",
-      dataTip: "Liquidaciones",
-      permission: PERMISSIONS.NOMINAS_VER,
-    },
-    {
       name: "Tasa del dolar",
       icon: <MdCurrencyExchange className="text-2xl"/>,
       href: "/exchange",
@@ -80,10 +73,10 @@ export default async function DashboardLayout({ children }) {
       permission: PERMISSIONS.NOMINAS_EDITAR,
     },
     {
-      name: "Registro de uditoria",
+      name: "Registro de auditoria",
       icon: <MdOutlineAssignment className="text-2xl"/>,
       href: "/audits",
-      dataTip: "Registro de uditoria",
+      dataTip: "Registro de auditoria",
       permission: PERMISSIONS.ROLES_GESTIONAR,
     },
     {

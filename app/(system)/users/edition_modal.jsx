@@ -2,8 +2,9 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { validatePassword, validatePasswordMatch } from "./passwordValidation";
 
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const inputClassName = (error) =>
@@ -55,14 +56,16 @@ const EditionModal = ({ userToEdit, roles, onClose, onUserUpdated }) => {
             newErrors.rol = "Debe seleccionar un rol";
         }
 
+        // Use shared password validation (password is optional on edit, but if provided must be valid)
         if (formData.password) {
-            if (formData.password.length < 6) {
-                newErrors.password = "La contraseña debe tener al menos 6 caracteres";
+            const passwordError = validatePassword(formData.password);
+            if (passwordError) {
+                newErrors.password = passwordError;
             }
-            if (!formData.confirmPassword) {
-                newErrors.confirmPassword = "Debe confirmar la contraseña";
-            } else if (formData.password !== formData.confirmPassword) {
-                newErrors.confirmPassword = "Las contraseñas no coinciden";
+
+            const matchError = validatePasswordMatch(formData.password, formData.confirmPassword);
+            if (matchError) {
+                newErrors.confirmPassword = matchError;
             }
         }
 

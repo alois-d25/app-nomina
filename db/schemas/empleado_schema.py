@@ -16,6 +16,7 @@ class EmpleadoBase(BaseModel):
     salario_base: Decimal = Field(..., max_digits=14, decimal_places=2)
     telefono: str | None = None
     numero_cuenta: str | None = None
+    es_por_hora: bool = False
     dias_trabajados_semana: int | None = None
     horas_trabajadas_semana: int | None = None
 
@@ -35,6 +36,7 @@ class EmpleadoUpdate(BaseModel):
     salario_base: Decimal | None = Field(None, max_digits=14, decimal_places=2)
     telefono: str | None = None
     numero_cuenta: str | None = None
+    es_por_hora: bool | None = None
     dias_trabajados_semana: int | None = None
     horas_trabajadas_semana: int | None = None
 

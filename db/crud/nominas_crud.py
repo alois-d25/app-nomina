@@ -1,7 +1,9 @@
 import json
+import math
 import os
 from typing import Optional, List
 from datetime import datetime, date
+from calendar import monthrange
 
 from fastapi import Depends
 from sqlalchemy import extract, or_, func
@@ -16,6 +18,7 @@ from models.bono_model import Bono, BonoEmpleado
 from models.deduccion_model import Deduccion, DeduccionEmpleado
 from models.cestaticket_model import Cestaticket, CestaticketMes
 from models.evento_empleado_model import EventoEmpleado, TipoEvento
+from models.empleado_model import EstadoEmpleado
 from models.niveles_escalafon_model import NivelesEscalafon
 
 crud_nominas = CRUDBase[Nominas, NominasCreate, NominasUpdate](Nominas)
@@ -38,6 +41,21 @@ def _calcular_salario_integral(salario_mensual: float) -> float:
     alicuota_util = salario_mensual * dias_utilidades / 360
     alicuota_bono = salario_mensual * dias_bono_vacacional / 360
     return salario_mensual + alicuota_util + alicuota_bono
+
+
+def _valor_hora(salario_mensual: float, horas_semana: int) -> float:
+    """Valor de una hora de trabajo para un empleado por horas.
+
+    Modelo fijo: el mes tiene 4 semanas -> 2 por quincena.
+      salario_quincena = salario_mensual / 2
+      horas_quincena   = horas_semana * 2
+      valor_hora       = salario_quincena / horas_quincena = salario_mensual / (horas_semana * 4)
+    Ej: $200/mes, 40 h/semana -> 100 / 80 = $1.25/hora.
+    """
+    if not horas_semana:
+        return 0.0
+    salario_quincena = salario_mensual / 2
+    return salario_quincena / (horas_semana * 2)
 
 
 def _aplicar_formula(formula: str, salario_base: float) -> float:
@@ -67,14 +85,16 @@ def _bono_aplica(bono: Bono, is_q1: bool, year: int, month: int) -> bool:
 
 
 def _deduccion_aplica(ded: Deduccion, is_q1: bool, year: int, month: int) -> bool:
-    nomina_date = date(year, month, 15 if is_q1 else 30)
-    if ded.fecha_inicio and nomina_date < ded.fecha_inicio:
-        return False
-    if ded.fecha_fin and nomina_date > ded.fecha_fin:
-        return False
+    nomina_date = date(year, month, 15 if is_q1 else monthrange(year, month)[1])
     if ded.tipo_pago == 'quincenal':
         return True
     if ded.tipo_pago == 'mensual':
+        if ded.nombre=='prestamo' and not is_q1:
+            # Aplica en cada 2da quincena desde el inicio del préstamo.
+            # El fin depende del saldo pendiente (ver _calcular_totales), no de
+            # fecha_fin, para poder pausar la cuota en vacaciones y reanudarla
+            # después sin perderla.
+            return bool(ded.fecha and nomina_date >= ded.fecha)
         return not is_q1
     if ded.tipo_pago == 'unico' and ded.fecha:
         return (
@@ -147,20 +167,21 @@ def _crear_deducciones_eventos(session: Session, nomina_id: int, year: int, mont
 
     for ne in nomina_empleados:
         cedula = ne.empleado_cedula
-        #salario mensual
-        salario_quincena = float(ne.salario_base) / 2
 
-        # Get empleado to calculate valor_dia for event deductions
+        # Get empleado to calculate valor_dia for event deductions.
+        # El salario mensual se toma del empleado (ne.salario_base ya es el de la quincena).
         empleado = session.query(Empleado).filter_by(cedula=cedula).first()
         if not empleado:
             continue
 
-        nivel = session.query(NivelesEscalafon).filter_by(id=empleado.nivel_escalafon_id).first()
-        es_por_hora = bool(nivel and nivel.es_por_hora)
+        salario_mensual = float(empleado.salario_base)
+        salario_quincena = salario_mensual / 2
+
+        es_por_hora = bool(empleado.es_por_hora)
         dias_semana = empleado.dias_trabajados_semana or 0
         horas_semana = empleado.horas_trabajadas_semana or 0
         valor_dia = (salario_quincena / (dias_semana * 2)) if dias_semana else 0.0
-        valor_hora = (salario_quincena / (horas_semana * 2)) if horas_semana else 0.0
+        valor_hora = _valor_hora(salario_mensual, horas_semana)
 
         # Get all eventos for this employee in this period
         eventos = session.query(EventoEmpleado).filter(
@@ -326,11 +347,14 @@ def get_nomina_detalle_empleados(id: int, db: Session, skip: int = 0, limit: int
     total = query.count()
     empleados_nomina = query.offset(skip).limit(limit).all()
 
+    escalafones = {n.id: n.nombre for n in db.query(NivelesEscalafon).all()}
+
     items = []
     for emp_nom, emp in empleados_nomina:
         items.append({
             "empleado_cedula": emp_nom.empleado_cedula,
             "nombre": f"{emp.nombre} {emp.apellido}",
+            "nivel_escalafon": escalafones.get(emp.nivel_escalafon_id, "No asignado"),
             "salario_base": emp_nom.salario_base,
             "total_ingresos": emp_nom.total_ingresos,
             "total_deducciones": emp_nom.total_deducciones,
@@ -362,49 +386,47 @@ def get_dashboard_resumen(db: Session):
             func.coalesce(func.sum(NominaEmpleado.total_ingresos), 0),
             func.count(NominaEmpleado.empleado_cedula)
         ).filter(NominaEmpleado.nomina_id == n.id).first()
-        monto_total_bs = float(agg[0]) if agg else 0
+        # total_ingresos ya se almacena en USD; los Bs son USD * tasa.
+        monto_total_usd = float(agg[0]) if agg else 0
         tasa_n = float(n.tasa_dolar) if n.tasa_dolar else None
         ultimas_nominas.append({
             "id": n.id,
             "fecha_pago": n.fecha_pago.isoformat(),
-            "monto_total_bs": monto_total_bs,
-            "monto_total_usd": (monto_total_bs / tasa_n) if tasa_n else None,
+            "monto_total_usd": monto_total_usd,
+            "monto_total_bs": (monto_total_usd * tasa_n) if tasa_n else None,
             "tasa_dolar": tasa_n,
             "total_empleados": int(agg[1]) if agg else 0,
         })
 
     # --- Gráfica: gasto total pagado (salario + bonos, en USD) agrupado por mes ---
     # Las deducciones no se restan porque ese dinero lo retiene la empresa.
+    # total_ingresos ya está en USD, por lo que no se divide entre la tasa.
     chart_map = {}
     todas_nominas = db.query(Nominas).filter(Nominas.tasa_dolar.isnot(None)).all()
     for n in todas_nominas:
-        tasa_n = float(n.tasa_dolar)
-        if tasa_n == 0:
-            continue
-        total_bs = db.query(func.coalesce(func.sum(NominaEmpleado.total_ingresos), 0)).filter(
+        total_usd = db.query(func.coalesce(func.sum(NominaEmpleado.total_ingresos), 0)).filter(
             NominaEmpleado.nomina_id == n.id
         ).scalar()
-        usd = float(total_bs) / tasa_n
         key = n.fecha_pago.strftime('%Y-%m')
-        chart_map[key] = chart_map.get(key, 0) + usd
+        chart_map[key] = chart_map.get(key, 0) + float(total_usd)
 
     grafica_gastos = [
         {"mes": k, "total_usd": round(v, 2)}
         for k, v in sorted(chart_map.items())
     ]
 
-    # --- Tarjeta: gasto del mes más reciente (en Bs) ---
-    gastos_mensuales_bs = 0
+    # --- Tarjeta: gasto del mes más reciente (en USD) ---
+    gastos_mensuales_usd = 0
     if ultimas_nominas:
         mes_reciente = ultimas_nominas[0]["fecha_pago"][:7]  # 'YYYY-MM'
-        gastos_mensuales_bs = sum(
-            un["monto_total_bs"] for un in ultimas_nominas if un["fecha_pago"][:7] == mes_reciente
+        gastos_mensuales_usd = sum(
+            un["monto_total_usd"] for un in ultimas_nominas if un["fecha_pago"][:7] == mes_reciente
         )
 
     return {
         "total_empleados": total_empleados,
         "empleados_activos": empleados_activos,
-        "gastos_mensuales_bs": gastos_mensuales_bs,
+        "gastos_mensuales_usd": gastos_mensuales_usd,
         "tasa_actual": tasa_actual,
         "tasa_tipo": tasa_tipo,
         "ultimas_nominas": ultimas_nominas,
@@ -422,13 +444,14 @@ def get_nominas_historial(db: Session):
             func.coalesce(func.sum(NominaEmpleado.total_ingresos), 0),
             func.count(NominaEmpleado.empleado_cedula)
         ).filter(NominaEmpleado.nomina_id == n.id).first()
-        monto_total_bs = float(agg[0]) if agg else 0
+        # total_ingresos ya se almacena en USD; los Bs son USD * tasa.
+        monto_total_usd = float(agg[0]) if agg else 0
         tasa_n = float(n.tasa_dolar) if n.tasa_dolar else None
         historial.append({
             "id": n.id,
             "fecha_pago": n.fecha_pago.isoformat(),
-            "monto_total_bs": monto_total_bs,
-            "monto_total_usd": (monto_total_bs / tasa_n) if tasa_n else None,
+            "monto_total_usd": monto_total_usd,
+            "monto_total_bs": (monto_total_usd * tasa_n) if tasa_n else None,
             "tasa_dolar": tasa_n,
             "total_empleados": int(agg[1]) if agg else 0,
         })
@@ -452,9 +475,9 @@ def _calcular_descuento_eventos(session, cedula: str, salario_base: float,
     """
     from calendar import monthrange
     from models.evento_empleado_model import EventoEmpleado
-    from models.niveles_escalafon_model import NivelesEscalafon
 
-    salario_quincena = float(salario_base or 0) / 2
+    salario_mensual = float(salario_base or 0)
+    salario_quincena = salario_mensual / 2
     if salario_quincena <= 0:
         return 0.0
 
@@ -466,13 +489,12 @@ def _calcular_descuento_eventos(session, cedula: str, salario_base: float,
     empleado = session.query(Empleado).filter_by(cedula=cedula).first()
     if not empleado:
         return 0.0
-    nivel = session.query(NivelesEscalafon).filter_by(id=empleado.nivel_escalafon_id).first()
-    es_por_hora = bool(nivel and nivel.es_por_hora)
+    es_por_hora = bool(empleado.es_por_hora)
 
     dias_semana = empleado.dias_trabajados_semana or 0
     horas_semana = empleado.horas_trabajadas_semana or 0
     valor_dia = (salario_quincena / (dias_semana * 2)) if dias_semana else 0.0
-    valor_hora = (salario_quincena / (horas_semana * 2)) if horas_semana else 0.0
+    valor_hora = _valor_hora(salario_mensual, horas_semana)
 
     eventos = session.query(EventoEmpleado).filter(
         EventoEmpleado.empleado_cedula == cedula
@@ -529,6 +551,7 @@ def _calcular_totales(session, nomina_id: int, cedula: str, salario_base: float,
         ))
 
     # ── Deducciones ───────────────────────────────────────────────────────────
+    #hay que pulir esta consulta para cuando sean unicos io fe tipo prestamo, los filtre por fecha
     deducciones = session.query(Deduccion).join(
         DeduccionEmpleado, DeduccionEmpleado.deduccion_id == Deduccion.id
     ).filter(DeduccionEmpleado.empleado_cedula == cedula).all()
@@ -538,7 +561,26 @@ def _calcular_totales(session, nomina_id: int, cedula: str, salario_base: float,
         if not _deduccion_aplica(ded, is_q1, year, month):
             continue
         formula = ded.formula_calculo if ded.formula_calculo else "manual"
-        if formula != "manual":
+        if formula == "prestamo":
+            nomina_date = date(year, month, 15 if is_q1 else monthrange(year, month)[1])
+            salary_limit = float(salario_base) * 0.25
+            n_cuotas = 1 if float(ded.monto) <= salary_limit else math.ceil(float(ded.monto) / salary_limit)
+            cuota = float(ded.monto) / n_cuotas
+            # Saldo = total - lo ya cobrado en nóminas ANTERIORES (excluye la actual,
+            # para ser idempotente ante recálculos). Cobrar mientras quede saldo permite
+            # pausar la cuota en vacaciones y reanudarla después sin perder ninguna.
+            ya_cobrado = session.query(
+                func.coalesce(func.sum(NominaEmpleadoDeduccion.monto_aplicado), 0)
+            ).join(Nominas, Nominas.id == NominaEmpleadoDeduccion.nomina_id).filter(
+                NominaEmpleadoDeduccion.deduccion_id == ded.id,
+                NominaEmpleadoDeduccion.nomina_id != nomina_id,
+                Nominas.fecha_pago < nomina_date,
+            ).scalar() or 0.0
+            saldo = float(ded.monto) - float(ya_cobrado)
+            if saldo <= 0:
+                continue  # préstamo ya saldado: no cobrar nada
+            monto = min(cuota, saldo)
+        elif formula != "manual":
             monto = _aplicar_formula(formula, salario_base)
         elif ded.es_porcentaje:
             monto = salario_base * float(ded.monto) / 100
@@ -578,18 +620,163 @@ def _calcular_totales(session, nomina_id: int, cedula: str, salario_base: float,
     return total_bonos, total_deducciones, cestaticket_monto
 
 
+def _get_estado_vacacion_empleado(
+    session: Session, cedula: str, q_start: date, q_end: date
+) -> dict:
+    """
+    Determina el estado vacacional del empleado para el período q_start..q_end.
+    Retorna un dict con:
+      estado: "activo" | "inicio" | "en_curso" | "reintegro"
+      evento: EventoEmpleado | None
+      dias_trabajados: int (solo para "reintegro")
+    """
+    from calendar import monthrange
+
+    ev = session.query(EventoEmpleado).filter(
+        EventoEmpleado.empleado_cedula == cedula,
+        EventoEmpleado.tipo_evento == TipoEvento.vacaciones,
+        EventoEmpleado.fecha_inicio <= q_end,
+        EventoEmpleado.fecha_fin >= q_start,
+    ).first()
+
+    if ev is None:
+        return {"estado": "activo", "evento": None}
+
+    vac_inicio = ev.fecha_inicio
+    vac_fin = ev.fecha_fin
+
+    # Vacation starts within this period
+    if q_start <= vac_inicio <= q_end:
+        return {"estado": "inicio", "evento": ev}
+
+    # Vacation ends within this period (and started before)
+    if q_start <= vac_fin <= q_end:
+        # Calculate days worked after vacation ends
+        if vac_fin.day <= 15:
+            dias_trabajados = 15 - vac_fin.day
+        else:
+            ultimo_dia = monthrange(vac_fin.year, vac_fin.month)[1]
+            dias_trabajados = ultimo_dia - vac_fin.day
+        return {"estado": "reintegro", "evento": ev, "dias_trabajados": max(0, dias_trabajados)}
+
+    # Vacation completely spans the period
+    return {"estado": "en_curso", "evento": ev}
+
+
+def _dias_trabajados_en_quincena(q_start: date, q_end: date,
+                                 vac_inicio: date, vac_fin: date) -> int:
+    """
+    Días del rango [q_start, q_end] que NO caen dentro de [vac_inicio, vac_fin].
+    Sirve para prorratear el salario tanto al inicio como al reintegro de vacaciones
+    (e incluso si la vacación empieza y termina dentro de la misma quincena).
+    """
+    total = (q_end - q_start).days + 1
+    overlap_start = max(q_start, vac_inicio)
+    overlap_end = min(q_end, vac_fin)
+    dias_vacacion = max(0, (overlap_end - overlap_start).days + 1)
+    return max(0, total - dias_vacacion)
+
+
+def _get_or_create_bono_vacacion(session: Session, nombre: str) -> Bono:
+    """Obtiene o crea un bono de sistema para pagos vacacionales."""
+    bono = session.query(Bono).filter(Bono.nombre == nombre).first()
+    if not bono:
+        bono = Bono(
+            nombre=nombre,
+            monto=0,
+            es_porcentaje=False,
+            descripcion=f"Pago de {nombre.lower()} (generado por sistema)",
+            tipo_pago="unico",
+        )
+        session.add(bono)
+        session.flush()
+    return bono
+
+
 def _rebuild_nomina_snapshots(session: Session, nomina_id: int, tasa_dolar: float,
                               year: int, month: int, is_q1: bool):
+    from calendar import monthrange
+
+    if is_q1:
+        q_start, q_end = date(year, month, 1), date(year, month, 15)
+    else:
+        q_start, q_end = date(year, month, 16), date(year, month, monthrange(year, month)[1])
+
     session.query(NominaEmpleadoBono).filter(NominaEmpleadoBono.nomina_id == nomina_id).delete()
     session.query(NominaEmpleadoDeduccion).filter(NominaEmpleadoDeduccion.nomina_id == nomina_id).delete()
 
     for ne in session.query(NominaEmpleado).filter(NominaEmpleado.nomina_id == nomina_id).all():
         empleado = session.query(Empleado).filter_by(cedula=ne.empleado_cedula).first()
         salario_mensual_usd = float(empleado.salario_base) if empleado else float(ne.salario_base) * 2
-        salario_quincena_usd = salario_mensual_usd / 2
-        total_bonos, total_deducciones, cestaticket_monto = _calcular_totales(
-            session, nomina_id, ne.empleado_cedula, salario_mensual_usd, is_q1, year, month
-        )
+
+        estado_vac = _get_estado_vacacion_empleado(session, ne.empleado_cedula, q_start, q_end)
+        ev = estado_vac.get("evento")
+
+        if estado_vac["estado"] == "activo":
+            salario_quincena_usd = salario_mensual_usd / 2
+            total_bonos, total_deducciones, cestaticket_monto = _calcular_totales(
+                session, nomina_id, ne.empleado_cedula, salario_mensual_usd, is_q1, year, month
+            )
+
+        elif estado_vac["estado"] == "inicio":
+            # Salario proporcional a los días trabajados antes de iniciar las vacaciones
+            # + beneficios vacacionales como bonos (montos snapshot del evento).
+            dias_trabajados = _dias_trabajados_en_quincena(
+                q_start, q_end, ev.fecha_inicio, ev.fecha_fin
+            )
+            salario_quincena_usd = (salario_mensual_usd / 30.0) * dias_trabajados
+            total_bonos, total_deducciones, cestaticket_monto = _calcular_totales(
+                session, nomina_id, ne.empleado_cedula, salario_mensual_usd, is_q1, year, month
+            )
+            if ev and ev.monto_vacaciones_usd:
+                bono_sal_vac = _get_or_create_bono_vacacion(session, "Salario de Vacaciones")
+                session.add(NominaEmpleadoBono(
+                    nomina_id=nomina_id,
+                    empleado_cedula=ne.empleado_cedula,
+                    bono_id=bono_sal_vac.id,
+                    monto_aplicado=float(ev.monto_vacaciones_usd),
+                ))
+                total_bonos += float(ev.monto_vacaciones_usd)
+            if ev and ev.monto_bono_vac_usd:
+                bono_bono_vac = _get_or_create_bono_vacacion(session, "Bono Vacacional")
+                session.add(NominaEmpleadoBono(
+                    nomina_id=nomina_id,
+                    empleado_cedula=ne.empleado_cedula,
+                    bono_id=bono_bono_vac.id,
+                    monto_aplicado=float(ev.monto_bono_vac_usd),
+                ))
+                total_bonos += float(ev.monto_bono_vac_usd)
+
+        elif estado_vac["estado"] == "en_curso":
+            # Solo cestaticket, cero en todo lo demás
+            salario_quincena_usd = 0.0
+            total_bonos = 0.0
+            total_deducciones = 0.0
+            cestaticket_monto = 0.0
+            if not is_q1:
+                _, cestaticket_monto = _calcular_cestaticket(
+                    session, ne.empleado_cedula, year, month, salario_mensual_usd
+                )
+
+        elif estado_vac["estado"] == "reintegro":
+            # Salario proporcional a los días trabajados post-reintegro
+            dias_trabajados = _dias_trabajados_en_quincena(
+                q_start, q_end, ev.fecha_inicio, ev.fecha_fin
+            )
+            salario_quincena_usd = (salario_mensual_usd / 30.0) * dias_trabajados
+            total_bonos, total_deducciones, cestaticket_monto = _calcular_totales(
+                session, nomina_id, ne.empleado_cedula, salario_mensual_usd, is_q1, year, month
+            )
+            # Revertir estado a activo
+            if empleado:
+                empleado.estado = EstadoEmpleado.activo
+
+        else:
+            salario_quincena_usd = salario_mensual_usd / 2
+            total_bonos, total_deducciones, cestaticket_monto = _calcular_totales(
+                session, nomina_id, ne.empleado_cedula, salario_mensual_usd, is_q1, year, month
+            )
+
         total_ingresos = salario_quincena_usd + total_bonos
         salario_final_usd = total_ingresos - total_deducciones
         ne.salario_base = salario_quincena_usd
@@ -605,15 +792,21 @@ def _rebuild_nomina_snapshots(session: Session, nomina_id: int, tasa_dolar: floa
 
 def create_nomina_with_employees_info(fecha_pago: str, tasa_pago: float):
     session = SessionLocal()
+
     try:
-        nomina = Nominas(fecha_pago=fecha_pago, tasa_dolar=tasa_pago)
+        try:
+            fecha_obj = datetime.strptime(fecha_pago, '%Y-%m-%d').date() if isinstance(fecha_pago, str) else fecha_pago
+        except ValueError as e:
+            raise ValueError(f"Fecha inválida '{fecha_pago}': {str(e)}")
+
+        year, month, day = fecha_obj.year, fecha_obj.month, fecha_obj.day
+        is_first_period = day <= 15
+
+        
+        nomina = Nominas(fecha_pago=fecha_obj, tasa_dolar=tasa_pago)
         session.add(nomina)
         session.commit()
         session.refresh(nomina)
-
-        fecha_obj = datetime.strptime(fecha_pago, '%Y-%m-%d') if isinstance(fecha_pago, str) else fecha_pago
-        year, month, day = fecha_obj.year, fecha_obj.month, fecha_obj.day
-        is_first_period = day <= 15
 
         empleados = session.query(Empleado).filter(
             or_(Empleado.estado == 'activo', Empleado.estado == 'permiso')
@@ -632,6 +825,11 @@ def create_nomina_with_employees_info(fecha_pago: str, tasa_pago: float):
         _rebuild_nomina_snapshots(session, nomina.id, float(tasa_pago), year, month, is_first_period)
 
         return session.query(NominaEmpleado).filter(NominaEmpleado.nomina_id == nomina.id).all()
+    except Exception as e:
+        print(f"ERROR in create_nomina_with_employees_info: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
     finally:
         session.close()
 

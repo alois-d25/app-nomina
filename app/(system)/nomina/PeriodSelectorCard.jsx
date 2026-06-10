@@ -1,5 +1,6 @@
 import React from "react";
 import { BsCalendarMonth } from "react-icons/bs";
+import { BiChevronLeft, BiChevronRight } from "react-icons/bi";
 
 const getMonthName = (monthNumber) => {
   const date = new Date();
@@ -7,7 +8,45 @@ const getMonthName = (monthNumber) => {
   return date.toLocaleString("es-ES", { month: "long" });
 };
 
+const getLastDayOfMonth = (year, month) => {
+  const lastDay = new Date(year, month, 0).getDate();
+  console.log(`getLastDayOfMonth(${year}, ${month}) = ${lastDay}`);
+  return lastDay;
+};
+
 const PeriodSelectorCard = ({ period, setPeriod, setPage }) => {
+  const handlePreviousPeriod = () => {
+    // 2da quincena -> 1ra del mismo mes; 1ra -> 2da del mes anterior.
+    if (period.quincena === 2) {
+      setPeriod({ year: period.year, month: period.month, quincena: 1 });
+    } else {
+      let newMonth = period.month - 1;
+      let newYear = period.year;
+      if (newMonth < 1) {
+        newMonth = 12;
+        newYear -= 1;
+      }
+      setPeriod({ year: newYear, month: newMonth, quincena: 2 });
+    }
+    setPage(1);
+  };
+
+  const handleNextPeriod = () => {
+    // 1ra quincena -> 2da del mismo mes; 2da -> 1ra del mes siguiente.
+    if (period.quincena === 1) {
+      setPeriod({ year: period.year, month: period.month, quincena: 2 });
+    } else {
+      let newMonth = period.month + 1;
+      let newYear = period.year;
+      if (newMonth > 12) {
+        newMonth = 1;
+        newYear += 1;
+      }
+      setPeriod({ year: newYear, month: newMonth, quincena: 1 });
+    }
+    setPage(1);
+  };
+
   return (
     <div className="col-span-1 md:col-span-2 bg-surface-container-lowest rounded-xl p-6 border border-outline-variant/30 shadow-[0_4px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
       <div>
@@ -25,7 +64,7 @@ const PeriodSelectorCard = ({ period, setPeriod, setPage }) => {
                 {getMonthName(period.month).charAt(0).toUpperCase() + getMonthName(period.month).slice(1)}
               </div>
               <div className="font-body-md text-on-surface-variant">
-                {period.quincena === 1 ? "1-15" : "16-30"} de {getMonthName(period.month)} • {period.year}
+                {period.quincena === 1 ? "1-15" : `16-${getLastDayOfMonth(period.year, period.month)}`} de {getMonthName(period.month)} • {period.year}
               </div>
             </div>
           </div>
@@ -36,7 +75,7 @@ const PeriodSelectorCard = ({ period, setPeriod, setPage }) => {
             <input
               type="date"
               className="rounded-lg border border-outline-variant bg-surface-bright text-body-md py-2.5 px-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-              value={`${period.year}-${String(period.month).padStart(2, "0")}-${period.quincena === 1 ? "15" : "30"}`}
+              value={`${period.year}-${String(period.month).padStart(2, "0")}-${String(period.quincena === 1 ? "15" : getLastDayOfMonth(period.year, period.month)).padStart(2, "0")}`}
               onChange={(e) => {
                 if (!e.target.value) return;
                 const date = new Date(e.target.value + "T00:00:00");
@@ -47,6 +86,20 @@ const PeriodSelectorCard = ({ period, setPeriod, setPage }) => {
                 setPage(1);
               }}
             />
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={handlePreviousPeriod}
+              className="btn btn-sm btn-ghost"
+            >
+              <BiChevronLeft className="text-xl" />
+            </button>
+            <button
+              onClick={handleNextPeriod}
+              className="btn btn-sm btn-ghost"
+            >
+              <BiChevronRight className="text-xl" />
+            </button>
           </div>
         </div>
       </div>

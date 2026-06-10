@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Body, Depends, HTTPException
+from crud.tasa_dolar_crud import crud_tasa_dolar
+from routers.tasa_dolar_router import _fetch_bcv_valor
+from models.tasa_dolar_model import FuenteTasa, TipoTasa
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
@@ -22,9 +25,17 @@ from models.nominas_model import Nominas
 router = APIRouter(tags=["Nominas"])
 
 @router.get("/dashboard/resumen", tags=["Nominas"], dependencies=[Depends(get_current_payload)])
-def get_dashboard_resumen(db: Session = Depends(get_db)):
+async def get_dashboard_resumen(db: Session = Depends(get_db)):
     """Resumen agregado para el dashboard: conteos, tasa, últimas nóminas y gráfica de gastos."""
-    return nominas_crud.get_dashboard_resumen(db)
+    resumen = nominas_crud.get_dashboard_resumen(db)
+    if resumen["tasa_actual"] is None:
+        try:
+            valor = await _fetch_bcv_valor()
+            resumen["tasa_actual"] = valor
+            resumen["tasa_tipo"] = "BCV"
+        except Exception:
+            pass
+    return resumen
 
 
 @router.get("/historial/completo", tags=["Nominas"], dependencies=[Depends(get_current_payload)])
@@ -70,18 +81,41 @@ def get_nomina_detalle_empleados(
 
 
 @router.post("/crear", tags=["Nominas"], dependencies=[Depends(require_permission("nominas:crear"))])
-def create_nomina(fecha_pago: str = Body(...), tasa_pago: float = Body(...)):
+async def create_nomina(fecha_pago: str = Body(..., embed=True), db: Session = Depends(get_db)):
     """
     Crea una nómina para un período específico con todos los empleados.
+    La tasa de cambio se determina automáticamente:
+    - Si hay una tasa personalizada vigente en el sistema → se usa esa.
+    - Si no → se consulta la API BCV en tiempo real.
+    En ambos casos se guarda un registro en el histórico de tasas.
     - fecha_pago: formato 'YYYY-MM-DD'
-    - tasa_pago: tasa de dolar para conversión
     """
+    # 1. Determinar tasa vigente
+    tasa_personalizada = crud_tasa_dolar.get_tasa_personalizada_vigente(db)
+    if tasa_personalizada is not None:
+        tasa_valor = tasa_personalizada
+        tasa_fuente = FuenteTasa.usuario
+        ultimo = crud_tasa_dolar.get_ultimo_registro(db)
+        tasa_tipo = ultimo.tipo if ultimo else TipoTasa.PERSONALIZADO
+    else:
+        try:
+            tasa_valor = await _fetch_bcv_valor()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"No se pudo obtener la tasa BCV: {exc}")
+        tasa_fuente = FuenteTasa.api
+        tasa_tipo = TipoTasa.BCV
+
+    # 2. Crear nómina
     try:
-        result = nominas_crud.create_nomina_with_employees_info(fecha_pago, tasa_pago)
+        result = nominas_crud.create_nomina_with_employees_info(fecha_pago, tasa_valor)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear nómina: {str(e)}")
+
+    # 3. Guardar tasa en el histórico
+    crud_tasa_dolar.guardar_tasa_usada(db, tasa_valor, tasa_fuente, tasa_tipo)
+
     return {"status": "success", "message": "Nómina creada exitosamente", "nomina_empleados": result}
 
 

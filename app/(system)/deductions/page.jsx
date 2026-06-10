@@ -5,13 +5,19 @@ import { toast } from "react-toastify";
 import PayrollActionModal from "@/app/(system)/nomina/PayrollActionModal";
 import Can from "@/components/Can";
 import { PERMISSIONS } from "@/app/config/permissions";
-import { FaArrowTrendDown, FaArrowsRotate, FaChevronLeft, FaChevronRight, FaPlus } from "react-icons/fa6";
+import { FaArrowTrendDown, FaArrowsRotate, FaChevronLeft, FaChevronRight, FaPlus, FaLock } from "react-icons/fa6";
 import { BsPeopleFill } from "react-icons/bs";
 import { HiDotsVertical } from "react-icons/hi";
 import { FaSearch } from "react-icons/fa";
 
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const ITEMS_PER_PAGE = 10;
+
+// Deducciones de ley (IVSS, LPH, Paro Forzoso/SPF, FAOV): no pueden editarse ni eliminarse.
+const DEDUCCIONES_LEGALES = new Set(["ivss", "lph", "spf", "faov"]);
+const esDeduccionLegal = (ded) =>
+    DEDUCCIONES_LEGALES.has(String(ded?.formula_calculo || "").toLowerCase()) ||
+    DEDUCCIONES_LEGALES.has(String(ded?.nombre || "").toLowerCase());
 
 const DeductionsPage = () => {
     const [inputValue, setInputValue] = useState("");
@@ -196,6 +202,11 @@ const DeductionsPage = () => {
                                         <td className="text-sm opacity-70">{ded.descripcion || "—"}</td>
                                         <td className="text-sm whitespace-nowrap">{ded.created_at ? new Date(ded.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—"}</td>
                                         <td>
+                                            {esDeduccionLegal(ded) ? (
+                                                <span className="badge badge-soft badge-neutral gap-1" title="Deducción de ley: no editable ni eliminable">
+                                                    <FaLock className="text-xs" /> De ley
+                                                </span>
+                                            ) : (
                                             <Can permission={[PERMISSIONS.NOMINAS_EDITAR, PERMISSIONS.NOMINAS_ELIMINAR]} anyOf
                                                 fallback={<span className="text-sm opacity-40">—</span>}>
                                                 <button className="btn btn-ghost btn-primary btn-sm" popoverTarget={`popover-ded-${ded.id}`} style={{ anchorName: `--anchor-ded-${ded.id}` }}>
@@ -214,6 +225,7 @@ const DeductionsPage = () => {
                                                     </Can>
                                                 </ul>
                                             </Can>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

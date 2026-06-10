@@ -159,8 +159,8 @@ export default function ExchangeRatesPage() {
       if (opcionTasa === 'BCV') {
         payload = {
           tipo: "BCV",
-          valor: Number(parseFloat(tasaActual.usd).toFixed(2)),
-          fecha: normalizarFecha(tasaActual.date),
+          valor: Number(parseFloat(tasaActual.valor).toFixed(2)),
+          fecha: fechaHoy,
           fuente: "api",
           usuario_id: currentUserId
         };
@@ -221,7 +221,7 @@ export default function ExchangeRatesPage() {
                 value={opcionTasa}
                 onChange={(e) => setOpcionTasa(e.target.value)}
               >
-                <option value="BCV">Tasa Oficial API BCV (Bs. {Number(tasaActual?.usd).toFixed(2) || '...'})</option>
+                <option value="BCV">Tasa Oficial API BCV (Bs. {tasaActual?.valor ? Number(tasaActual.valor).toFixed(2) : '...'})</option>
                 <option value="PERSONALIZADO">Tasa Personalizada (Ingreso Manual)</option>
               </select>
 
@@ -299,7 +299,7 @@ export default function ExchangeRatesPage() {
         <div className="lg:col-span-1 flex flex-col gap-stack-md">
           <RateCard
             title="Tasa BCV"
-            rate={tasaActual?.usd || <span className="loading loading-spinner loading-xs"></span>}
+            rate={tasaActual?.valor ?? <span className="loading loading-spinner loading-xs"></span>}
             type="BCV"
           />
         </div>

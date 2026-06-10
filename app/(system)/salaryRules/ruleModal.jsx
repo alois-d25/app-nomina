@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const RuleModal = ({ ruleToEdit, titulos, escalafones, onClose, onRuleSaved }) => {
     const [formData, setFormData] = useState({

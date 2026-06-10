@@ -4,17 +4,20 @@ import { FaPlus, FaSearch } from "react-icons/fa";
 import { HiDotsVertical } from "react-icons/hi";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa6";
 import RuleModal from "./ruleModal";
+import TituloModal from "./tituloModal";
 import { toast } from "react-toastify";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Can from "@/components/Can";
 import { PERMISSIONS } from "@/app/config/permissions";
+import { TituloService } from "@/services/titulo.service";
 
 const itemsPerPage = 5; 
 
 const SalaryRules = ({rulesData, titulos, escalafones}) => {
     const [rules, setRules] = useState(rulesData);
-    
+    const [titulosList, setTitulosList] = useState(titulos);
+
     // 2. Estados para filtros y paginación
     const [statusFilter, setStatusFilter] = useState("");
     const [inputValue, setInputValue] = useState("");
@@ -25,15 +28,25 @@ const SalaryRules = ({rulesData, titulos, escalafones}) => {
     const [ruleToDelete, setRuleToDelete] = useState(null);
     const router = useRouter();
 
-    const API_URL = "";
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     
     const refrescarReglas = async () => {
         try {
             const res = await axios.get(`${API_URL}/api/reglas_escalafon/vista/detalles`);
             setRules(res.data);
-            router.refresh(); 
+            router.refresh();
         } catch (error) {
             console.error("Error recargando reglas:", error);
+        }
+    };
+
+    const refrescarTitulos = async () => {
+        try {
+            const data = await TituloService.getTitulos();
+            setTitulosList(data || []);
+            router.refresh();
+        } catch (error) {
+            console.error("Error recargando títulos:", error);
         }
     };
 
@@ -73,6 +86,10 @@ const SalaryRules = ({rulesData, titulos, escalafones}) => {
     const openAddModal = () => {
         setRuleToEdit(null);
         document.getElementById("rule_modal")?.showModal();
+    };
+
+    const openTituloModal = () => {
+        document.getElementById("titulo_modal")?.showModal();
     };
 
     const openEditModal = (rule) => {
@@ -118,13 +135,18 @@ const SalaryRules = ({rulesData, titulos, escalafones}) => {
                     <h2>Escala y reglas salariales</h2>
                     <p className="text-lg "><span className="text-on-surface-variant">Configure rangos académicos y salarios base</span></p>
                 </div>
-                <Can permission={PERMISSIONS.NOMINAS_CREAR}>
-                    <div>
+                <div className="flex gap-2">
+                    <Can permission={[PERMISSIONS.NOMINAS_CREAR, PERMISSIONS.NOMINAS_EDITAR, PERMISSIONS.NOMINAS_ELIMINAR]} anyOf>
+                        <button className="btn btn-outline btn-primary whitespace-nowrap" onClick={openTituloModal}>
+                            <FaPlus/> Añadir título
+                        </button>
+                    </Can>
+                    <Can permission={PERMISSIONS.NOMINAS_CREAR}>
                         <button className="btn btn-primary whitespace-nowrap" onClick={openAddModal}>
                             <FaPlus/> Añadir regla
                         </button>
-                    </div>
-                </Can>
+                    </Can>
+                </div>
             </div>
 
             <div className="flex flex-col mt-4 shadow-md rounded-md border border-outline-variant">
@@ -231,12 +253,17 @@ const SalaryRules = ({rulesData, titulos, escalafones}) => {
                 </div>
             </div>
 
-            <RuleModal 
-                ruleToEdit={ruleToEdit} 
-                titulos={titulos} 
-                escalafones={escalafones} 
-                onClose={() => setRuleToEdit(null)} 
-                onRuleSaved={refrescarReglas} 
+            <RuleModal
+                ruleToEdit={ruleToEdit}
+                titulos={titulosList}
+                escalafones={escalafones}
+                onClose={() => setRuleToEdit(null)}
+                onRuleSaved={refrescarReglas}
+            />
+
+            <TituloModal
+                titulos={titulosList}
+                onTitulosChanged={refrescarTitulos}
             />
 
             <dialog id="delete_rule_modal" className="modal">

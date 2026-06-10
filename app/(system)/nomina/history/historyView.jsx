@@ -109,7 +109,7 @@ export default function NominaHistoryView({ historial }) {
                                         <td className="font-mono">#{nomina.id}</td>
                                         <td>{formatFecha(nomina.fecha_pago)}</td>
                                         <td>{nomina.total_empleados}</td>
-                                        <td className="font-medium">Bs. {formatBs(nomina.monto_total_bs)}</td>
+                                        <td className="font-medium">{nomina.monto_total_bs != null ? `Bs. ${formatBs(nomina.monto_total_bs)}` : "—"}</td>
                                         <td className="font-medium">{nomina.monto_total_usd != null ? formatUsd(nomina.monto_total_usd) : "—"}</td>
                                         <td>
                                             <div className="badge badge-outline badge-primary">

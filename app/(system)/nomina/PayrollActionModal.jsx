@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { IoClose } from "react-icons/io5";
+import { toast } from "react-toastify";
 import EmployeeSelector from "./EmployeeSelector";
 import { EmployeeService } from "@/services/employee.service";
 
@@ -51,7 +52,7 @@ export default function PayrollActionModal({ isOpen, onClose, onSubmit, type, ed
           } else {
             // Fallback: fetch from API if relationshipsData not provided
             try {
-              const API_URL = "";
+              const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
               const endpoint = type === "bono"
                 ? `${API_URL}/api/bonos_relaciones/empleados`
                 : `${API_URL}/api/deducciones_relaciones/empleados`;
@@ -102,14 +103,29 @@ export default function PayrollActionModal({ isOpen, onClose, onSubmit, type, ed
   if (!isOpen) return null;
 
   const isBono = type === "bono";
+  const isPrestamo = formData.nombre === "Prestamo Personal";
+  const tipoPagoValue = isPrestamo ? "Mensual" : formData.tipo_pago;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!isEditMode && formData.selectedEmployees.length === 0) {
-      alert("Por favor seleccione al menos un empleado");
+      toast.error("Por favor seleccione al menos un empleado");
       return;
     }
-    onSubmit(formData);
+    if (isPrestamo && formData.selectedEmployees.length !== 1) {
+      toast.error("Los préstamos solo pueden asignarse a un empleado");
+      return;
+    }
+    const monto = parseFloat(formData.monto);
+    if (isNaN(monto) || monto <= 0) {
+      toast.error("El monto debe ser un número mayor a 0");
+      return;
+    }
+    if (formData.es_porcentaje && monto > 100) {
+      toast.error("Un porcentaje no puede ser mayor a 100");
+      return;
+    }
+    onSubmit({ ...formData, isPrestamo });
   };
 
   return (
@@ -148,15 +164,21 @@ export default function PayrollActionModal({ isOpen, onClose, onSubmit, type, ed
                     required
                     className="select rounded-lg border-outline-variant bg-surface-bright p-2.5 focus:ring-primary"
                     value={formData.nombre}
-                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                    onChange={(e) => {
+                      const newNombre = e.target.value;
+                      const newData = { ...formData, nombre: newNombre };
+                      if (newNombre === "Prestamo Personal") {
+                        newData.tipo_pago = "Mensual";
+                        newData.selectedEmployees = newData.selectedEmployees.length > 0 ? [newData.selectedEmployees[0]] : [];
+                      }
+                      setFormData(newData);
+                    }}
                   >
                     <optgroup label="Deducciones internas (monto manual)">
                       <option value="Anticipos">Anticipos</option>
                       <option value="Uniforme">Uniforme</option>
                       <option value="Inscripcion">Inscripcion</option>
                       <option value="Prestamo Personal">Prestamo Personal</option>
-                      <option value="Inasistencias">Inasistencias</option>
-                      <option value="Beca Escolar">Beca Escolar</option>
                     </optgroup>
                   </select>
                 )}
@@ -164,18 +186,25 @@ export default function PayrollActionModal({ isOpen, onClose, onSubmit, type, ed
               <div className="flex flex-col gap-1">
                 <label className="font-label-md text-on-surface-variant text-label-md">Tipo de Pago</label>
                 <select
-                  className="select rounded-lg border-outline-variant bg-surface-bright p-2.5"
-                  value={formData.tipo_pago}
-                  onChange={(e) => setFormData({ ...formData, tipo_pago: e.target.value })}
+                  disabled={isPrestamo}
+                  className={`select rounded-lg border-outline-variant bg-surface-bright p-2.5 ${isPrestamo ? "opacity-50 cursor-not-allowed" : ""}`}
+                  value={tipoPagoValue}
+                  onChange={(e) => {
+                    if (!isPrestamo) {
+                      setFormData({ ...formData, tipo_pago: e.target.value });
+                    }
+                  }}
                 >
-                  <option>Quincenal</option>
-                  <option value={'unico'}>Único</option>
-                  <option>Mensual</option>
+                  <option value="Quincenal">Quincenal</option>
+                  <option value="unico">Único</option>
+                  <option value="Mensual">Mensual</option>
                 </select>
               </div>
-              {formData.tipo_pago === 'unico' && (
+              {(formData.tipo_pago === 'unico' || isPrestamo) && (
                 <div className="flex flex-col gap-1">
-                  <label className="font-label-md text-on-surface-variant text-label-md">Fecha</label>
+                  <label className="font-label-md text-on-surface-variant text-label-md">
+                    {isPrestamo ? "Fecha de Inicio" : "Fecha"}
+                  </label>
                   <input
                     required
                     type="date"
@@ -234,6 +263,7 @@ export default function PayrollActionModal({ isOpen, onClose, onSubmit, type, ed
                   employees={employees}
                   initialSelected={formData.selectedEmployees}
                   onSelectionChange={(ids) => setFormData({ ...formData, selectedEmployees: ids })}
+                  singleSelect={isPrestamo}
                 />
               )}
             </div>

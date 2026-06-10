@@ -40,8 +40,13 @@ class Empleado(Base, AuditMixin):
     telefono = Column(String(20), nullable=True)
     numero_cuenta = Column(String(50), nullable=True)
 
-    # Jornada (se llena según el nivel de escalafón):
-    # - niveles normales -> dias_trabajados_semana
-    # - niveles "por hora" (profesor x hora) -> horas_trabajadas_semana
+    # Tipo de jornada del empleado (ya no depende del nivel de escalafón):
+    # - True  -> se paga por hora; usa horas_trabajadas_semana
+    # - False -> se paga por día (Lun-Vie); usa dias_trabajados_semana
+    es_por_hora = Column(Boolean, nullable=False, default=False)
+
+    # Jornada según el tipo de empleado:
+    # - por día  -> dias_trabajados_semana
+    # - por hora -> horas_trabajadas_semana
     dias_trabajados_semana = Column(Integer, nullable=True)
     horas_trabajadas_semana = Column(Integer, nullable=True)

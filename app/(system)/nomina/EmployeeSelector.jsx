@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { BiSearch } from "react-icons/bi";
 
-export default function EmployeeSelector({ employees, onSelectionChange, initialSelected = [] }) {
+export default function EmployeeSelector({ employees, onSelectionChange, initialSelected = [], singleSelect = false }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -12,18 +12,32 @@ export default function EmployeeSelector({ employees, onSelectionChange, initial
     setSelectedIds(initialSelected || []);
   }, [initialSelected]);
 
+  // When singleSelect mode is enabled, enforce single selection
+  useEffect(() => {
+    if (singleSelect && selectedIds.length > 1) {
+      const newSelection = [selectedIds[0]];
+      setSelectedIds(newSelection);
+      onSelectionChange(newSelection);
+    }
+  }, [singleSelect]);
+
   const filteredEmployees = useMemo(() => {
-    return employees.filter(emp => 
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    return employees.filter(emp =>
+      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.id.toString().includes(searchTerm)
     );
   }, [employees, searchTerm]);
 
   const handleToggle = (id) => {
-    const newSelection = selectedIds.includes(id)
-      ? selectedIds.filter(item => item !== id)
-      : [...selectedIds, id];
-    
+    let newSelection;
+    if (singleSelect) {
+      newSelection = selectedIds.includes(id) ? [] : [id];
+    } else {
+      newSelection = selectedIds.includes(id)
+        ? selectedIds.filter(item => item !== id)
+        : [...selectedIds, id];
+    }
+
     setSelectedIds(newSelection);
     onSelectionChange(newSelection);
   };
@@ -50,15 +64,17 @@ export default function EmployeeSelector({ employees, onSelectionChange, initial
       <div className="border border-outline-variant rounded-xl overflow-hidden bg-surface-bright">
         <div className="bg-surface-container-low p-2 px-4 border-b border-outline-variant flex justify-between items-center">
           <span className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">
-            {selectedIds.length} seleccionados
+            {selectedIds.length} {singleSelect ? "seleccionado" : "seleccionados"}
           </span>
-          <button 
-            type="button"
-            onClick={handleSelectAll}
-            className="text-primary font-label-sm text-label-sm hover:underline"
-          >
-            {selectedIds.length === filteredEmployees.length ? "Desmarcar todos" : "Marcar todos"}
-          </button>
+          {!singleSelect && (
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className="text-primary font-label-sm text-label-sm hover:underline"
+            >
+              {selectedIds.length === filteredEmployees.length ? "Desmarcar todos" : "Marcar todos"}
+            </button>
+          )}
         </div>
         <div className="max-h-60 overflow-y-auto">
           {filteredEmployees.map((emp) => (

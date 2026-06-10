@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from 'react';
-import { MdAccountBalance, MdMail, MdLock, MdArrowForward } from 'react-icons/md';
+import { MdAccountBalance, MdMail, MdLock, MdArrowForward, MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import axios from 'axios';
 import { useAuth } from '@/app/context/auth_context';
 
@@ -17,28 +17,43 @@ const BrandLogo = () => (
 );
 
 // Componente para los campos de entrada con ícono
-const InputField = ({ label, id, type, placeholder, icon: Icon, name, value, onChange }) => (
-  <div>
-    <label className="block font-label-md text-label-md text-on-surface mb-2" htmlFor={id}>
-      {label}
-    </label>
-    <div className="relative">
-      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
-        <Icon className="text-xl" />
+const InputField = ({ label, id, type, placeholder, icon: Icon, name, value, onChange, passwordToggle = false }) => {
+  const [visible, setVisible] = useState(false);
+  const inputType = passwordToggle ? (visible ? 'text' : 'password') : type;
+
+  return (
+    <div>
+      <label className="block font-label-md text-label-md text-on-surface mb-2" htmlFor={id}>
+        {label}
+      </label>
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
+          <Icon className="text-xl" />
+        </div>
+        <input
+          className={`block w-full pl-10 ${passwordToggle ? 'pr-10' : 'pr-3'} py-2.5 border border-outline-variant rounded-DEFAULT bg-surface text-on-surface font-body-md text-body-md focus:ring-1 focus:ring-primary focus:border-primary transition-colors placeholder:text-on-surface-variant/50 hover:border-outline`}
+          id={id}
+          name={name}
+          placeholder={placeholder}
+          required
+          type={inputType}
+          value={value}
+          onChange={onChange}
+        />
+        {passwordToggle && (
+          <button
+            type="button"
+            onClick={() => setVisible((prev) => !prev)}
+            aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            {visible ? <MdVisibilityOff className="text-xl" /> : <MdVisibility className="text-xl" />}
+          </button>
+        )}
       </div>
-      <input
-        className="block w-full pl-10 pr-3 py-2.5 border border-outline-variant rounded-DEFAULT bg-surface text-on-surface font-body-md text-body-md focus:ring-1 focus:ring-primary focus:border-primary transition-colors placeholder:text-on-surface-variant/50 hover:border-outline"
-        id={id}
-        name={name}
-        placeholder={placeholder}
-        required
-        type={type}
-        value={value}
-        onChange={onChange}
-      />
     </div>
-  </div>
-);
+  );
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,6 +72,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -64,7 +81,7 @@ export default function LoginPage() {
 
     try {
       const response = await axios.post(
-        `/api/login/login`,
+        `${API_BASE}/api/login/login`,
         { email, password },
         { withCredentials: true }
       );
@@ -151,6 +168,7 @@ export default function LoginPage() {
               icon={MdLock}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              passwordToggle
             />
           </div>
 

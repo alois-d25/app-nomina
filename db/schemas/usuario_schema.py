@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from datetime import datetime
 
 class UsuarioBase(BaseModel):
@@ -7,6 +7,13 @@ class UsuarioBase(BaseModel):
     empleado_cedula: str
     activo: bool = True
     rol_id: int
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 6:
+            raise ValueError("La contraseña debe tener al menos 6 caracteres")
+        return v
     
 class UsuarioCreate(UsuarioBase):
     pass

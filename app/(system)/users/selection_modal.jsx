@@ -4,8 +4,9 @@ import { FaPlus, FaSearch } from "react-icons/fa";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa6";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { validatePassword, validatePasswordMatch } from "./passwordValidation";
 
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const inputClassName = (error) =>
@@ -120,16 +121,15 @@ const SelectionModal = ({    selectedEmployee, setSelectedEmployee, inputValue, 
             newErrors.rol = "Debe seleccionar un rol";
         }
 
-        if (!password) {
-            newErrors.password = "La contraseña es requerida";
-        } else if (password.length < 6) {
-            newErrors.password = "La contraseña debe tener al menos 6 caracteres";
+        // Use shared password validation
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            newErrors.password = passwordError;
         }
 
-        if (!confirmPassword) {
-            newErrors.confirmPassword = "Debe confirmar la contraseña";
-        } else if (password !== confirmPassword) {
-            newErrors.confirmPassword = "Las contraseñas no coinciden";
+        const matchError = validatePasswordMatch(password, confirmPassword);
+        if (matchError) {
+            newErrors.confirmPassword = matchError;
         }
 
         setErrors(newErrors);

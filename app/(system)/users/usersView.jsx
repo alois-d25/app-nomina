@@ -13,9 +13,9 @@ import EditionModal from "./edition_modal";
 import Can from "@/components/Can";
 import { PERMISSIONS } from "@/app/config/permissions";
 
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const UsersView = ({usersData, employeesData, userRoles}) => {
+const UsersView = ({usersData, employeesData, userRoles, activeSessions}) => {
     const [statusFilter, setStatusFilter] = useState("");
     const [roleFilter, setRoleFilter] = useState("");
     const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -99,20 +99,22 @@ const UsersView = ({usersData, employeesData, userRoles}) => {
         }
     };
 
-    const itemsPerPage = 5; 
+    const itemsPerPage = 5;
+
+    const usuariosActivos = users.filter((u) => u.activo).length;
 
     const dataCards = [
         {
             title: "Usuarios activos",
-            description: "Usuarios registrados en el sistema",
+            description: "Usuarios activos en el sistema",
             icon: <LuUsers/>,
-            link: "/"
+            value: usuariosActivos
         },
         {
             title: "Sesiones activas",
             description: "Número de sesiones activas en el sistema",
             icon: <MdDevices/>,
-            link: "/"
+            value: activeSessions
         }
     ]
 
@@ -183,8 +185,7 @@ const UsersView = ({usersData, employeesData, userRoles}) => {
                             </div>
                             
                             <div className="divider"></div>
-                            <p className="mt-2">{card.description}</p><h2 className="mt-2">5</h2>
-                            {/* Aqui iria la data dinamica con un listener */}
+                            <p className="mt-2">{card.description}</p><h2 className="mt-2">{card.value}</h2>
                         </div>
                     ))
                 }

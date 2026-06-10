@@ -206,3 +206,187 @@ def create_payroll_report_excel(nomina_id, detalle_empleados, fecha_pago, tasa_d
     wb.save(output)
     output.seek(0)
     return output
+
+
+def create_liquidacion_excel(liquidacion: dict) -> bytes:
+    """Genera el recibo de liquidación en Excel con desglose completo Art. 142 LOTTT."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Recibo de Liquidación"
+
+    blue_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    orange_fill = PatternFill(start_color="C55A11", end_color="C55A11", fill_type="solid")
+    green_fill = PatternFill(start_color="375623", end_color="375623", fill_type="solid")
+    gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    white_font = Font(color="FFFFFF", bold=True, size=11)
+    bold = Font(bold=True)
+    money_fmt = '#,##0.00'
+
+    # ── Título ────────────────────────────────────────────────────────────────────
+    ws['A1'] = "RECIBO DE LIQUIDACIÓN"
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:F1')
+
+    row = 3
+    datos = [
+        ("Empleado:", liquidacion.get("empleado_nombre", liquidacion.get("empleado_cedula"))),
+        ("Cédula:", liquidacion.get("empleado_cedula")),
+        ("Salario Base (Bs):", liquidacion.get("empleado_salario_base")),
+        ("Fecha de Egreso:", liquidacion.get("fecha_egreso")),
+        ("Causa de Egreso:", liquidacion.get("causa_egreso")),
+        ("Años de Servicio:", f"{liquidacion.get('anios_totales', 0):.2f}"),
+        ("Tasa USD (Bs):", liquidacion.get("tasa_dolar")),
+        ("Salario Integral Diario (Bs):", liquidacion.get("salario_integral_dia")),
+    ]
+    for label, valor in datos:
+        ws[f'A{row}'] = label
+        ws[f'A{row}'].font = bold
+        ws[f'B{row}'] = valor
+        ws.merge_cells(f'B{row}:F{row}')
+        row += 1
+
+    row += 1
+
+    def section_header(title: str, fill):
+        nonlocal row
+        ws[f'A{row}'] = title
+        ws[f'A{row}'].fill = fill
+        ws[f'A{row}'].font = white_font
+        ws.merge_cells(f'A{row}:F{row}')
+
+    def col_headers():
+        nonlocal row
+        row += 1
+        for col, h in enumerate(["Concepto", "Días", "SID (Bs)", "Monto (Bs)", "Monto (USD)", "Observación"], 1):
+            cell = ws.cell(row=row, column=col)
+            cell.value = h
+            cell.font = bold
+            cell.fill = gray_fill
+        row += 1
+
+    def data_row(concepto, dias, sid, monto_bs, monto_usd, obs=""):
+        nonlocal row
+        ws.cell(row=row, column=1).value = concepto
+        ws.cell(row=row, column=2).value = round(dias, 2) if dias is not None else "—"
+        ws.cell(row=row, column=3).value = round(sid, 4) if sid else "—"
+        ws.cell(row=row, column=4).value = monto_bs
+        ws.cell(row=row, column=4).number_format = money_fmt
+        ws.cell(row=row, column=5).value = monto_usd
+        ws.cell(row=row, column=5).number_format = money_fmt
+        ws.cell(row=row, column=6).value = obs or ""
+        row += 1
+
+    def subtotal_row(label, monto_bs, monto_usd):
+        nonlocal row
+        ws.cell(row=row, column=1).value = label
+        ws.cell(row=row, column=1).font = bold
+        ws.cell(row=row, column=4).value = monto_bs
+        ws.cell(row=row, column=4).font = bold
+        ws.cell(row=row, column=4).number_format = money_fmt
+        ws.cell(row=row, column=4).fill = gray_fill
+        ws.cell(row=row, column=5).value = monto_usd
+        ws.cell(row=row, column=5).font = bold
+        ws.cell(row=row, column=5).number_format = money_fmt
+        ws.cell(row=row, column=5).fill = gray_fill
+        row += 1
+
+    sid = liquidacion.get("salario_integral_dia") or 0
+    tasa = liquidacion.get("tasa_dolar") or 1
+
+    desglose = {d["concepto"]: d for d in liquidacion.get("desglose", [])}
+
+    def d(concepto):
+        return desglose.get(concepto, {})
+
+    # ── Prestaciones Sociales Art. 142 ───────────────────────────────────────────
+    section_header("PRESTACIONES SOCIALES (Art. 142 LOTTT)", blue_fill)
+    col_headers()
+
+    esc_a = liquidacion.get("escenario_a_bs") or 0
+    esc_b = liquidacion.get("escenario_b_bs") or 0
+    esc = liquidacion.get("escenario_aplicado", "?")
+    prestaciones_bs = liquidacion.get("prestaciones_bs") or 0
+
+    data_row("  Escenario A — Depósitos trimestrales + adicionales",
+             None, sid, esc_a, round(esc_a / tasa, 2),
+             f"{'✓ APLICADO' if esc == 'A' else ''}")
+    data_row("  Escenario B — SID × 30 días × años de servicio",
+             None, sid, esc_b, round(esc_b / tasa, 2),
+             f"{'✓ APLICADO' if esc == 'B' else ''}")
+    subtotal_row(f"Prestaciones Sociales (Escenario {esc})", prestaciones_bs, round(prestaciones_bs / tasa, 2))
+
+    row += 1
+
+    # ── Conceptos Fraccionados ────────────────────────────────────────────────────
+    section_header("CONCEPTOS FRACCIONADOS (Ingresos)", blue_fill)
+    col_headers()
+
+    conceptos = [
+        ("Vacaciones Fraccionadas", "vacaciones_fracc_bs", "vacaciones_fraccionadas"),
+        ("Bono Vacacional Fraccionado", "bono_vac_fracc_bs", "bono_vac_fraccionado"),
+        ("Utilidades Fraccionadas", "utilidades_fracc_bs", "utilidades_fraccionadas"),
+        ("Salarios Pendientes", "salarios_pendientes_bs", "salarios_pendientes"),
+        ("Intereses de Prestaciones", "intereses_bs", "intereses"),
+    ]
+
+    subtotal_fracc = 0
+    for label, field, concepto_key in conceptos:
+        monto = liquidacion.get(field) or 0
+        linea = d(concepto_key)
+        dias = linea.get("cantidad_dias")
+        obs = linea.get("observacion", "")
+        data_row(label, dias, sid if dias else None, monto, round(monto / tasa, 2), obs)
+        subtotal_fracc += monto
+
+    subtotal_row("Subtotal Conceptos Fraccionados", round(subtotal_fracc, 2), round(subtotal_fracc / tasa, 2))
+
+    row += 1
+
+    # ── Deducciones ───────────────────────────────────────────────────────────────
+    section_header("DEDUCCIONES", orange_fill)
+    col_headers()
+
+    deudor = liquidacion.get("saldo_deudor_bs") or 0
+    data_row("Saldo Deudor Préstamos y Anticipos", None, None, deudor, round(deudor / tasa, 2),
+             d("saldo_deudor").get("observacion", ""))
+    subtotal_row("Total Deducciones", deudor, round(deudor / tasa, 2))
+
+    row += 1
+
+    # ── Resumen Final ─────────────────────────────────────────────────────────────
+    section_header("RESUMEN FINAL", green_fill)
+    row += 1
+
+    monto_total_bs = liquidacion.get("monto_total_bs") or 0
+    monto_total_usd = liquidacion.get("monto_total_usd") or 0
+    monto_neto_bs = liquidacion.get("monto_neto_bs") or 0
+    monto_neto_usd = liquidacion.get("monto_neto_usd") or 0
+
+    resumen = [
+        ("Total Bruto (Bs)", monto_total_bs, money_fmt),
+        ("Total Bruto (USD)", monto_total_usd, money_fmt),
+        ("(-) Deducciones (Bs)", deudor, money_fmt),
+        ("NETO A PAGAR (Bs)", monto_neto_bs, money_fmt),
+        ("NETO A PAGAR (USD)", monto_neto_usd, money_fmt),
+    ]
+    for label, valor, fmt in resumen:
+        ws[f'A{row}'] = label
+        ws[f'A{row}'].font = bold
+        ws[f'D{row}'] = valor
+        ws[f'D{row}'].font = Font(bold=True, size=12 if "NETO" in label else 11)
+        ws[f'D{row}'].number_format = fmt
+        if "NETO A PAGAR" in label:
+            ws[f'D{row}'].fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+        row += 1
+
+    # ── Ancho de columnas ─────────────────────────────────────────────────────────
+    ws.column_dimensions['A'].width = 40
+    ws.column_dimensions['B'].width = 10
+    ws.column_dimensions['C'].width = 16
+    ws.column_dimensions['D'].width = 16
+    ws.column_dimensions['E'].width = 16
+    ws.column_dimensions['F'].width = 45
+
+    output = BytesIO()
+    wb.save(output)
+    return output.getvalue()

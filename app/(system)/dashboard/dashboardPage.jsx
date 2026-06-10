@@ -29,7 +29,7 @@ const DashboardPage = ({ resumen }) => {
     const {
         total_empleados = 0,
         empleados_activos = 0,
-        gastos_mensuales_bs = 0,
+        gastos_mensuales_usd = 0,
         tasa_actual = null,
         tasa_tipo = null,
         ultimas_nominas = [],
@@ -51,7 +51,7 @@ const DashboardPage = ({ resumen }) => {
         },
         {
             title: "Gastos del mes",
-            quantity: <span className="text-primary">Bs. {formatBs(gastos_mensuales_bs)}</span>,
+            quantity: <span className="text-primary">{formatUsd(gastos_mensuales_usd)}</span>,
             icon: <FaSackDollar />,
             desc: "Total pagado en la nómina más reciente",
         },
@@ -150,7 +150,7 @@ const DashboardPage = ({ resumen }) => {
                                         <td className="font-mono">#{nomina.id}</td>
                                         <td>{formatFecha(nomina.fecha_pago)}</td>
                                         <td>{nomina.total_empleados}</td>
-                                        <td className="font-medium">Bs. {formatBs(nomina.monto_total_bs)}</td>
+                                        <td className="font-medium">{nomina.monto_total_bs != null ? `Bs. ${formatBs(nomina.monto_total_bs)}` : "—"}</td>
                                         <td className="font-medium">{nomina.monto_total_usd != null ? formatUsd(nomina.monto_total_usd) : "—"}</td>
                                         <td>
                                             <div className="badge badge-outline badge-primary">

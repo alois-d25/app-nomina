@@ -1,9 +1,12 @@
 import axios from "axios";
 
-// En contenedor único, Next.js actúa como proxy inverso vía rewrites.
-// Todas las peticiones a /api/* se redirigen internamente a FastAPI.
+// Nota: En Next.js las variables NEXT_PUBLIC se cargan automáticamente.
+// No es necesario llamar a dotenv.config() en archivos del lado del cliente.
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "https://tu-api-externa.com/api";
+
 const axiosClient = axios.create({
-  baseURL: "/api",
+  baseURL: API_URL + "/api",
   headers: {
     "Content-Type": "application/json",
   },

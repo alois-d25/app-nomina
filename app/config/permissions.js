@@ -31,7 +31,8 @@ const ROUTE_PERMISSIONS = [
   { prefix: '/bonus', permission: PERMISSIONS.NOMINAS_VER },
   { prefix: '/deductions', permission: PERMISSIONS.NOMINAS_VER },
   { prefix: '/liquidations', permission: PERMISSIONS.NOMINAS_VER },
-  { prefix: '/liquidaciones', permission: PERMISSIONS.NOMINAS_VER },
+  // Liquidaciones deshabilitadas temporalmente — sin entrada en ROUTE_PERMISSIONS
+  // para que RouteGuard la bloquee si se accede directamente por URL.
   // Afectar la tasa del dólar usada es una acción de edición sobre la nómina
   { prefix: '/exchange', permission: PERMISSIONS.NOMINAS_EDITAR },
   // Auditorías y configuración: solo quien gestiona roles/seguridad (Administrador general)

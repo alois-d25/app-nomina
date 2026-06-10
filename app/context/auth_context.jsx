@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import axios from 'axios';
 
 const AuthContext = createContext();
-const API_BASE = "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Interceptor global: adjunta el token de localStorage en cada petición de axios.
 // (Cubre tanto el `axios` global usado en las vistas como cualquier llamada directa.)
@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
       return null;
     }
     try {
-      const response = await axios.get(`/api/login/me`, {
+      const response = await axios.get(`${API_BASE}/api/login/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const currentUser = response.data?.user || null;
@@ -108,7 +108,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await axios.post(`/api/login/logout`, {});
+      await axios.post(`${API_BASE}/api/login/logout`, {});
     } catch {
       // Aunque falle el backend, limpiamos el estado local para evitar sesión fantasma.
     }

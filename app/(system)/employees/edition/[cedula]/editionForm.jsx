@@ -23,6 +23,9 @@ export default function EditEmployeeForm({ employeeData, titulos, escalafones })
     yearsExperience: employeeData.anios_experiencia || 0,
     hireDate: employeeData.fecha_ingreso || "",
     baseSalary: employeeData.salario_base || "",
+    tipoJornada: employeeData.es_por_hora ? "horas" : "dias",
+    diasTrabajados: employeeData.dias_trabajados_semana ?? "",
+    horasTrabajadas: employeeData.horas_trabajadas_semana ?? "",
   });
 
   const [errors, setErrors] = useState({});
@@ -43,9 +46,27 @@ export default function EditEmployeeForm({ employeeData, titulos, escalafones })
 
     if (!formData.firstName.trim()) newErrors.firstName = "El nombre es requerido";
     if (!formData.lastName.trim()) newErrors.lastName = "El apellido es requerido";
-    if (!formData.email.trim()) newErrors.email = "El correo electrónico es requerido";
+    if (!formData.email.trim()) {
+      newErrors.email = "El correo electrónico es requerido";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Formato de correo inválido";
+    }
+    if (!formData.highestDegree) newErrors.highestDegree = "El título académico es requerido";
+    if (!formData.academicRank) newErrors.academicRank = "La categoría (escalafón) es requerida";
     if (!formData.hireDate) newErrors.hireDate = "La fecha de ingreso es requerida";
-    if (!formData.baseSalary) newErrors.baseSalary = "El salario base es requerido";
+    if (formData.yearsExperience !== "" && parseInt(formData.yearsExperience) < 0)
+      newErrors.yearsExperience = "Los años de experiencia no pueden ser negativos";
+    if (!formData.baseSalary || parseFloat(formData.baseSalary) <= 0)
+      newErrors.baseSalary = "El salario base debe ser mayor a 0";
+    if (formData.tipoJornada === "dias") {
+      const dias = parseInt(formData.diasTrabajados);
+      if (!formData.diasTrabajados || dias < 1 || dias > 7)
+        newErrors.diasTrabajados = "Indique entre 1 y 7 días";
+    } else if (formData.tipoJornada === "horas") {
+      const horas = parseInt(formData.horasTrabajadas);
+      if (!formData.horasTrabajadas || horas < 1)
+        newErrors.horasTrabajadas = "Indique las horas trabajadas por semana";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -63,13 +84,18 @@ export default function EditEmployeeForm({ employeeData, titulos, escalafones })
           apellido: formData.lastName,
           anios_experiencia: parseInt(formData.yearsExperience) || 0,
           estado: formData.status,
-          nivel_escalafon_id: parseInt(formData.academicRank), 
+          nivel_escalafon_id: parseInt(formData.academicRank),
           titulo_academico_id: parseInt(formData.highestDegree),
           fecha_ingreso: formData.hireDate,
-          salario_base: parseFloat(formData.baseSalary)
+          salario_base: parseFloat(formData.baseSalary),
+          es_por_hora: formData.tipoJornada === "horas",
+          dias_trabajados_semana:
+            formData.tipoJornada === "dias" ? parseInt(formData.diasTrabajados) || null : null,
+          horas_trabajadas_semana:
+            formData.tipoJornada === "horas" ? parseInt(formData.horasTrabajadas) || null : null,
         };
 
-        const API_URL = "";
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         await axios.put(`${API_URL}/api/empleados/${employeeData.cedula}`, payload);
 
         toast.success("¡Datos actualizados exitosamente!");
@@ -143,21 +169,21 @@ export default function EditEmployeeForm({ employeeData, titulos, escalafones })
                 <h3 className="font-semibold text-lg text-base-content m-0">Información Académica</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <FormField label="Título Académico" name="highestDegree" value={formData.highestDegree} onChange={handleChange} type="select" required>
+                <FormField label="Título Académico" name="highestDegree" value={formData.highestDegree} onChange={handleChange} error={errors.highestDegree} type="select" required>
                   <option value="" disabled>Seleccionar título</option>
                   {titulos.map((titulo) => (
                     <option key={titulo.id} value={titulo.id}>{titulo.nombre}</option>
                   ))}
                 </FormField>
 
-                <FormField label="Categoría (Escalafón)" name="academicRank" value={formData.academicRank} onChange={handleChange} type="select" required>
+                <FormField label="Categoría (Escalafón)" name="academicRank" value={formData.academicRank} onChange={handleChange} error={errors.academicRank} type="select" required>
                   <option value="" disabled>Seleccionar categoría</option>
                   {escalafones.map((escalafon) => (
                     <option key={escalafon.id} value={escalafon.id}>{escalafon.nombre}</option>
                   ))}
                 </FormField>
                 
-                <FormField label="Años de Experiencia" name="yearsExperience" value={formData.yearsExperience} onChange={handleChange} type="number" min="0" />
+                <FormField label="Años de Experiencia" name="yearsExperience" value={formData.yearsExperience} onChange={handleChange} error={errors.yearsExperience} type="number" min="0" />
               </div>
             </div>
 
@@ -170,6 +196,15 @@ export default function EditEmployeeForm({ employeeData, titulos, escalafones })
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField label="Fecha de Ingreso" name="hireDate" value={formData.hireDate} onChange={handleChange} error={errors.hireDate} required type="date" />
                 <FormField label="Salario Base (Mensual)" name="baseSalary" value={formData.baseSalary} onChange={handleChange} error={errors.baseSalary} required prefix="$" />
+                <FormField label="Tipo de Jornada" name="tipoJornada" value={formData.tipoJornada} onChange={handleChange} type="select" required>
+                  <option value="dias">Por días</option>
+                  <option value="horas">Por horas</option>
+                </FormField>
+                {formData.tipoJornada === "dias" ? (
+                  <FormField label="Días trabajados por semana" name="diasTrabajados" value={formData.diasTrabajados} onChange={handleChange} error={errors.diasTrabajados} type="number" min="1" max="7" placeholder="5" />
+                ) : (
+                  <FormField label="Horas trabajadas por semana" name="horasTrabajadas" value={formData.horasTrabajadas} onChange={handleChange} error={errors.horasTrabajadas} type="number" min="1" placeholder="ej. 12" />
+                )}
               </div>
             </div>
 

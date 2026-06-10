@@ -50,8 +50,10 @@ export const NominaService = {
 
   getEmployeesPayrollInfo: async (id) => {
     try {
+      // Traemos todos los empleados de la nómina de una vez; la búsqueda,
+      // el filtro y la paginación se hacen del lado del cliente.
       const response = await axiosClient.get(
-        `/${resource}/${id}/detalle-empleados`,
+        `/${resource}/${id}/detalle-empleados?skip=0&limit=100000`,
       );
       return response.data;
     } catch (error) {
@@ -103,11 +105,28 @@ export const NominaService = {
     }
   },
 
-  createNomina: async (fechaPago, tasaPago) => {
+  createPrestamo: async ({ empleado_cedula, monto_total, descripcion, fecha }) => {
+    try {
+      const response = await axiosClient.post('/deducciones/prestamo', {
+        empleado_cedula,
+        monto_total: parseFloat(monto_total),
+        descripcion: descripcion || "",
+        fecha: fecha || null,
+      });
+      return response.data;
+    } catch (error) {
+      console.error(
+        `Error creating prestamo:`,
+        error.response?.data || error.message,
+      );
+      throw error;
+    }
+  },
+
+  createNomina: async (fechaPago) => {
     try {
       const response = await axiosClient.post(`/${resource}/crear`, {
         fecha_pago: fechaPago,
-        tasa_pago: tasaPago,
       });
       return response.data;
     } catch (error) {
